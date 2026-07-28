@@ -11,6 +11,8 @@ The implementation is not an analogue WEFAX receiver. The `group3` and
 `group4` codecs nevertheless use real CCITT Group 3/4 TIFF facsimile
 compression.
 
+![A sample test file sent over RF](https://raw.githubusercontent.com/adulau/rifp/refs/heads/main/example/previews/full-rle.png)
+
 ## Protocol properties
 
 RIFP 1.0 provides:
