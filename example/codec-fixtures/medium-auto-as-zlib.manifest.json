@@ -1,0 +1,21 @@
+{
+  "bits_per_pixel": 1,
+  "codec": "zlib",
+  "content_encoding": "zlib",
+  "encoded_size": 7367,
+  "fixture": "telefunken-fubk-rifp-text",
+  "height": 240,
+  "jpeg_quality": null,
+  "media_type": "image/rifp-raster",
+  "payload_crc32": 3897358034,
+  "payload_file": "medium-auto-as-zlib.zlib",
+  "payload_sha256": "b7f4622d78cf4c7c3a26f40d6d1cdd2ea912b80a0a99f20c6d520e518a88a931",
+  "preset": "medium",
+  "preview_file": "medium-auto-as-zlib.png",
+  "protocol": "rifp",
+  "raw_size": 9600,
+  "requested_codec": "auto",
+  "source": "Telefunken_FuBK_RIFP_test_pattern.png",
+  "version": "1.0",
+  "width": 320
+}

@@ -1,0 +1,20 @@
+{
+  "bits_per_pixel": 1,
+  "codec": "group4",
+  "content_encoding": "ccitt-group4",
+  "encoded_size": 2240,
+  "fixture": "telefunken-fubk-rifp-text",
+  "height": 72,
+  "jpeg_quality": null,
+  "media_type": "image/tiff",
+  "payload_crc32": 528810279,
+  "payload_file": "tiny-group4.tiff",
+  "payload_sha256": "53aafc7c0a3cfd032d11e3f7bef5050cca86093ab8d48ac6d176480bcdd59c78",
+  "preset": "tiny",
+  "protocol": "rifp",
+  "raw_size": 864,
+  "requested_codec": "group4",
+  "source": "Telefunken_FuBK_RIFP_test_pattern.png",
+  "version": "1.0",
+  "width": 96
+}

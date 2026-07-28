@@ -1,0 +1,20 @@
+{
+  "bits_per_pixel": 4,
+  "codec": "rle",
+  "content_encoding": "rle8",
+  "encoded_size": 27922,
+  "fixture": "telefunken-fubk-rifp-text",
+  "height": 240,
+  "jpeg_quality": null,
+  "media_type": "image/rifp-raster",
+  "payload_crc32": 2046854846,
+  "payload_file": "medium-rle.rle",
+  "payload_sha256": "5688f512a34bea797120f3d74c0fbad4b1ea1b60ec103e0945883fdd0bb4bac6",
+  "preset": "medium",
+  "protocol": "rifp",
+  "raw_size": 38400,
+  "requested_codec": "rle",
+  "source": "Telefunken_FuBK_RIFP_test_pattern.png",
+  "version": "1.0",
+  "width": 320
+}

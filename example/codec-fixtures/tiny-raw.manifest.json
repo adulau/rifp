@@ -1,0 +1,20 @@
+{
+  "bits_per_pixel": 4,
+  "codec": "raw",
+  "content_encoding": "raw",
+  "encoded_size": 3456,
+  "fixture": "telefunken-fubk-rifp-text",
+  "height": 72,
+  "jpeg_quality": null,
+  "media_type": "image/rifp-raster",
+  "payload_crc32": 3533367514,
+  "payload_file": "tiny-raw.raster",
+  "payload_sha256": "3a5b18ff2a9342eb54ea1f61dad7a01a6b7aa1e7bb6f92f4da1cab2e69be7838",
+  "preset": "tiny",
+  "protocol": "rifp",
+  "raw_size": 3456,
+  "requested_codec": "raw",
+  "source": "Telefunken_FuBK_RIFP_test_pattern.png",
+  "version": "1.0",
+  "width": 96
+}
