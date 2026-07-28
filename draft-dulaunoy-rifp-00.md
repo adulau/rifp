@@ -3,22 +3,31 @@ title = "Radio Image Framing Protocol (RIFP)"
 abbrev = "RIFP"
 ipr = "trust200902"
 area = "Internet"
-workgroup = "Individual Submission"
 keyword = ["radio", "image", "facsimile", "FSK", "fragmentation"]
+docName = "draft-dulaunoy-rifp-00"
+submissiontype = "independent"
+category = "info"
 
 [seriesInfo]
 status = "experimental"
 name = "Internet-Draft"
 value = "draft-dulaunoy-rifp-00"
-stream = "IETF"
-
-date = 2026-07-25T00:00:00Z
+stream = "independent"
+date = 2026-07-28T00:00:00Z
 
 [[author]]
 initials = "A."
 surname = "Dulaunoy"
 fullname = "Alexandre Dulaunoy"
-organization = "CIRCL"
+organization = "Computer Incident Response Center Luxembourg"
+ [author.address]
+ email = "alexandre.dulaunoy@circl.lu"
+ phone = "+352 247 88444"
+ [author.address.postal]
+ street = "122, rue Adolphe Fischer"
+ city = "Luxembourg"
+ code = "L-1521"
+ country = "Luxembourg"
 %%%
 
 .# Abstract
