@@ -1,7 +1,8 @@
 # RIFP radio image sender and receiver
 
-This bundle implements the **Radio Image Framing Protocol (RIFP) 1.0**, an
-experimental, extensible standard for sending images over low-rate radio links.
+The **Radio Image Framing Protocol (RIFP) 1.0** is an experimental, extensible standard 
+for sending images over low-rate radio links.
+
 The default `rifp-cpfsk-4800` profile uses binary continuous-phase FSK and can
 be deployed around 433.92 MHz where local regulation permits it. RIFP itself is
 not tied to 433 MHz or to FSK.
@@ -9,21 +10,6 @@ not tied to 433 MHz or to FSK.
 The implementation is not an analogue WEFAX receiver. The `group3` and
 `group4` codecs nevertheless use real CCITT Group 3/4 TIFF facsimile
 compression.
-
-## Files
-
-- `rifp_protocol.py` — shared RIFP 1.0 wire format, frame/TLV parser, CRC and
-  version rules.
-- `radiofax_sender.py` — image scaling, codec selection, fragmentation,
-  repetition, scheduling, CPFSK modulation and SoapySDR transmission.
-- `radiofax_receiver.py` — channel discovery, CPFSK demodulation, extensible
-  frame validation, reassembly and safe image decoding.
-- `draft-dulaunoy-rifp-00.md` — complete Internet-Draft source in mmark format.
-- `requirements_radiofax.txt` — Python dependencies used outside SoapySDR.
-- `test_rifp_protocol.py` — wire-format and critical-extension conformance tests.
-
-The RIFP implementation supersedes the earlier prototype wire format and is
-not wire-compatible with IQ recordings (raw complex 32-bit floating-point IQ samples) made by that prototype.
 
 ## Protocol properties
 
@@ -164,19 +150,10 @@ Group 3, Group 4, PNG, JPEG, raw raster, RLE, ZLIB and automatic codec
 selection. A repeated-frame transfer was reconstructed after adding synthetic
 noise and a +2.5 kHz carrier offset.
 
-## Building the Internet-Draft
+## Internet-Draft
 
-Mmark emits RFCXML v3, which can then be rendered with `xml2rfc`:
-
-```bash
-mmark draft-dulaunoy-rifp-00.md > draft-dulaunoy-rifp-00.xml
-xml2rfc --v3 --text draft-dulaunoy-rifp-00.xml
-xml2rfc --v3 --html draft-dulaunoy-rifp-00.xml
-```
-
-The draft defines the base header, TLV extension model, manifest schema,
-fragmentation rules, CRC algorithm, CPFSK profile, security considerations,
-test vector and proposed IANA registries.
+The [Radio Image Framing Protocol (RIFP) draft-dulaunoy-rifp-00](https://datatracker.ietf.org/doc/draft-dulaunoy-rifp/) defines the base header, 
+TLV extension model, manifest schema, fragmentation rules, CRC algorithm, CPFSK profile, security considerations, test vector and proposed IANA registries.
 
 ## Radio and regulatory notes
 
@@ -185,3 +162,35 @@ development. Confirm permitted frequency, effective radiated power, occupied
 bandwidth, duty cycle, equipment requirements and licensing conditions before
 connecting an antenna. `--duty-cycle` only paces software bursts; it does not
 certify compliance or measure radiated emissions.
+
+## Open-Source License 
+
+The software is open-source under a BSD 2-Clause License. RIFP is free of patent or specific
+restriction on the standard.
+
+~~~
+BSD 2-Clause License
+
+Copyright (c) 2026, Alexandre Dulaunoy
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are met:
+
+1. Redistributions of source code must retain the above copyright notice, this
+   list of conditions and the following disclaimer.
+
+2. Redistributions in binary form must reproduce the above copyright notice,
+   this list of conditions and the following disclaimer in the documentation
+   and/or other materials provided with the distribution.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+~~~
