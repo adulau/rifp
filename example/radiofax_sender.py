@@ -453,6 +453,18 @@ class SoapyTransmitter:
         self.direction = SOAPY_SDR_TX
         self.channel = channel
         self.device = SoapySDR.Device(device_args)
+        tx_channels = int(self.device.getNumChannels(self.direction))
+        if tx_channels == 0:
+            raise RuntimeError(
+                "selected SoapySDR device has no transmit channels; "
+                "RTL-SDR devices are receive-only, so select TX-capable hardware "
+                "with --device or use --iq-output"
+            )
+        if channel < 0 or channel >= tx_channels:
+            raise ValueError(
+                f"TX channel {channel} is unavailable; selected device has "
+                f"{tx_channels} transmit channel(s)"
+            )
         self.device.setSampleRate(self.direction, channel, sample_rate)
         self.device.setFrequency(self.direction, channel, frequency)
         if bandwidth > 0:
