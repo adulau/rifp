@@ -23,7 +23,7 @@ compression.
 - `test_rifp_protocol.py` — wire-format and critical-extension conformance tests.
 
 The RIFP implementation supersedes the earlier prototype wire format and is
-not wire-compatible with IQ recordings made by that prototype.
+not wire-compatible with IQ recordings (raw complex 32-bit floating-point IQ samples) made by that prototype.
 
 ## Protocol properties
 
