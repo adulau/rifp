@@ -34,6 +34,46 @@ Unknown advisory extensions are ignored. Unknown critical extensions cause the
 individual frame to be rejected, allowing future features such as encryption,
 signatures, FEC and repair requests to be introduced safely.
 
+## Potential Use Cases
+
+RIFP is intended for the local distribution of visual information to nearby electronic displays, particularly in environments where Internet connectivity is unavailable, unreliable, undesirable, or unnecessarily complex.
+
+Potential use cases include:
+
+* **Local information and alert displays:** Distributing menus, schedules, operational notices, safety instructions, and alerts to nearby electronic displays. One example is displaying a restaurant menu on a ferry where Internet connectivity is unavailable or unreliable.
+
+* **Visitor information:** Providing practical information to visitors when they arrive at a location, such as opening hours, maps, instructions, local rules, event schedules, or contact details.
+
+* **Low-impact public information and advertising:** Displaying temporary information, announcements, or advertisements without permanently altering or visually cluttering the public space with printed posters, stickers, or signs.
+
+* **Museums, galleries, and art exhibitions:** Associating descriptions, contextual information, translations, or multimedia references with artworks without attaching visually intrusive paper labels next to each work.
+
+* **Electronic price labels:** Updating product prices, promotions, stock information, origin details, or other commercial information on electronic shelf labels.
+
+* **Emergency and disaster communications:** Broadcasting maps, evacuation instructions, shelter information, medical guidance, or status updates to battery-powered displays when mobile and Internet infrastructure is unavailable.
+
+* **Public transport information:** Updating departure times, route changes, platform information, disruptions, and passenger instructions at stops, stations, ferries, or temporary boarding points.
+
+* **Temporary events and exhibitions:** Distributing programmes, room assignments, speaker information, schedules, and wayfinding information during conferences, festivals, fairs, and community events.
+
+* **Tourism and cultural heritage sites:** Providing historical information, walking-route guidance, translations, accessibility information, and temporary notices at monuments, archaeological sites, nature trails, and remote attractions.
+
+* **Hotels, campsites, and accommodation facilities:** Updating breakfast times, activity schedules, weather warnings, check-out instructions, transport information, and local recommendations.
+
+* **Schools, universities, and campuses:** Distributing room changes, timetables, examination notices, emergency instructions, and event information to local displays.
+
+* **Industrial and operational environments:** Displaying equipment status, maintenance instructions, safety notices, work orders, and production information in warehouses, workshops, ports, and construction sites.
+
+* **Healthcare and care facilities:** Providing room information, queue status, visiting instructions, hygiene notices, or non-sensitive guidance without requiring each display to maintain an Internet connection.
+
+* **Remote and off-grid locations:** Updating information boards in mountain shelters, islands, rural areas, nature reserves, temporary camps, or other locations with limited infrastructure.
+
+* **Mobile or rapidly deployed installations:** Supplying information to displays installed in temporary shelters, field hospitals, emergency coordination centres, pop-up shops, mobile exhibitions, or humanitarian operations.
+
+* **Community noticeboards:** Distributing local announcements, municipal information, event notices, and public-service messages to low-power electronic noticeboards.
+
+* **Personal and domestic displays:** Updating household dashboards, shared calendars, reminders, weather information, or home-automation status on low-power displays without giving every device direct Internet access.
+
 ## Dependencies
 
 ```bash
