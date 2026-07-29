@@ -1,0 +1,1071 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- name="GENERATOR" content="github.com/mmarkdown/mmark Mmark Markdown Processor - mmark.miek.nl" -->
+<rfc version="3" ipr="trust200902" docName="draft-dulaunoy-rifp-01" submissionType="independent" category="exp" xml:lang="en" xmlns:xi="http://www.w3.org/2001/XInclude" indexInclude="true">
+
+<front>
+<title abbrev="RIFP">Radio Image Framing Protocol (RIFP)</title><seriesInfo value="draft-dulaunoy-rifp-01" stream="independent" status="experimental" name="Internet-Draft"></seriesInfo>
+<author initials="A." surname="Dulaunoy" fullname="Alexandre Dulaunoy"><organization>Computer Incident Response Center Luxembourg</organization><address><postal><street>122, rue Adolphe Fischer</street>
+<city>Luxembourg</city>
+<code>L-1521</code>
+<country>Luxembourg</country>
+</postal><phone>+352 247 88444</phone>
+<email>alexandre.dulaunoy@circl.lu</email>
+</address></author><date/>
+<area>Internet</area>
+<workgroup></workgroup>
+<keyword>radio</keyword>
+<keyword>image</keyword>
+<keyword>facsimile</keyword>
+<keyword>FSK</keyword>
+<keyword>fragmentation</keyword>
+
+<abstract>
+<t>This document specifies the Radio Image Framing Protocol (RIFP), a compact,
+unidirectional object-transfer protocol intended for transmitting images over
+low-rate radio links.  RIFP defines independently synchronized frames, a
+versioned and extensible binary header, fragmentation and reassembly rules, a
+fixed binary object descriptor, optional JSON metadata, per-frame CRC-32
+protection, whole-object SHA-256 verification,
+and registries for future frame types, flags, header extensions, media
+encodings, and radio profiles.</t>
+<t>RIFP is independent of a particular frequency allocation or modulation.  This
+document also defines an initial continuous-phase binary frequency-shift keying
+profile named <tt>rifp-cpfsk-4800</tt>.  The profile can be used on frequencies where
+local regulation permits such operation; 433.92 MHz is a common deployment
+example but is not mandated by this specification.</t>
+</abstract>
+
+</front>
+
+<middle>
+
+<section anchor="introduction"><name>Introduction</name>
+<t>Low-rate radio systems are often used to move small telemetry messages, but
+there are also practical cases for periodically sending weather maps, camera
+snapshots, diagrams, forms, or facsimile-like monochrome images.  Existing
+analogue facsimile systems generally bind image representation, timing, and
+modulation into one format.  That makes experimentation with compression,
+packet repetition, stronger integrity checks, or new physical layers harder.</t>
+<t>RIFP separates three concerns:</t>
+
+<ul spacing="compact">
+<li>an image object and its metadata;</li>
+<li>an extensible fragmentation and framing layer; and</li>
+<li>a named radio profile describing modulation and synchronization.</li>
+</ul>
+<t>The initial protocol is intentionally unidirectional.  A sender can repeat
+manifest and data frames to improve reception on lossy channels.  Future
+specifications can add repair requests, forward-error correction,
+authentication, encryption, or bidirectional operation without redefining the
+base frame.</t>
+</section>
+
+<section anchor="conventions-and-terminology"><name>Conventions and Terminology</name>
+<t>The key words <bcp14>MUST</bcp14>, <bcp14>MUST NOT</bcp14>, <bcp14>REQUIRED</bcp14>, <bcp14>SHALL</bcp14>, <bcp14>SHALL NOT</bcp14>,
+<bcp14>SHOULD</bcp14>, <bcp14>SHOULD NOT</bcp14>, <bcp14>RECOMMENDED</bcp14>, <bcp14>NOT RECOMMENDED</bcp14>, <bcp14>MAY</bcp14>, and
+<bcp14>OPTIONAL</bcp14> in this document are to be interpreted as described in BCP 14
+<xref target="RFC2119"></xref> <xref target="RFC8174"></xref> when, and only when, they appear in all capitals, as
+shown here.</t>
+<t>All multi-octet integers are unsigned and encoded in network byte order.
+Bits within an octet are transmitted most significant bit first.</t>
+
+<dl spacing="compact">
+<dt>Object:</dt>
+<dd>The complete encoded image byte sequence being transferred.</dd>
+<dt>Session:</dt>
+<dd>One transfer of one object, identified by a 64-bit Session ID.</dd>
+<dt>Frame:</dt>
+<dd>A complete RIFP protocol data unit consisting of a base header, optional
+header extensions, payload, and CRC-32 trailer.</dd>
+<dt>Radio profile:</dt>
+<dd>A named set of physical-layer and synchronization parameters used to carry
+RIFP frames.</dd>
+<dt>Critical extension:</dt>
+<dd>A flag or TLV that changes processing in a way that cannot safely be ignored.</dd>
+</dl>
+</section>
+
+<section anchor="protocol-overview"><name>Protocol Overview</name>
+<t>A sender performs the following operations:</t>
+
+<ol spacing="compact">
+<li>It scales and encodes an image.</li>
+<li>It assigns a 64-bit Session ID.</li>
+<li>It constructs a fixed binary OBJECT_DESCRIPTOR describing the object.</li>
+<li>It divides the encoded object into numbered chunks.</li>
+<li>It sends one or more OBJECT_DESCRIPTOR frames, DATA frames for each chunk,
+and an END frame.  It MAY additionally send a JSON MANIFEST.</li>
+<li>It MAY repeat any OBJECT_DESCRIPTOR, MANIFEST, or DATA frame.</li>
+</ol>
+<t>A receiver searches for the radio-profile synchronization word, parses the
+RIFP header, rejects unsupported critical features, validates the frame CRC,
+and stores valid chunks by Session ID and Sequence Number.  Once all chunks
+are present, the receiver concatenates them in sequence order and validates
+the complete size, CRC-32, and SHA-256 digest before decoding the image.</t>
+<t>Frames are self-synchronizing and independently protected.  A receiver does
+not need to receive a burst from its beginning, and it can process frames in
+any order.</t>
+</section>
+
+<section anchor="rifp-frame-format"><name>RIFP Frame Format</name>
+<t>A RIFP frame begins immediately after any radio-profile preamble and
+synchronization word.  The minimum header is 28 octets.</t>
+
+<artwork><![CDATA[  0                   1                   2                   3
+  0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
+ +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+ | Major Version | Minor Version |  Frame Type   | Header Length |
+ +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+ |                            Flags                              |
+ +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+ |                                                               |
+ +                         Session ID                            +
+ |                                                               |
+ +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+ |                        Sequence Number                        |
+ +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+ |                          Total Count                          |
+ +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+ |        Payload Length         |           Reserved            |
+ +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+ |                 Header Extensions, if any ...                 |
+ +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+ |                         Payload ...                           |
+ +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+ |                            CRC-32                             |
+ +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+]]>
+</artwork>
+
+<dl spacing="compact">
+<dt>Major Version:</dt>
+<dd>An 8-bit protocol major version.  This specification defines value 1.</dd>
+<dt>Minor Version:</dt>
+<dd>An 8-bit protocol minor version.  This specification defines value 0.</dd>
+<dt>Frame Type:</dt>
+<dd>An 8-bit value identifying the payload semantics.</dd>
+<dt>Header Length:</dt>
+<dd>Total header length in octets, including the 28-octet base header and all
+TLVs.  It <bcp14>MUST</bcp14> be between 28 and 255 inclusive.</dd>
+<dt>Flags:</dt>
+<dd>A 32-bit field.  Bits 0 through 15 are advisory.  Bits 16 through 31 are
+critical.</dd>
+<dt>Session ID:</dt>
+<dd>A 64-bit identifier shared by all frames in one transfer.  Senders <bcp14>SHOULD</bcp14>
+generate this value using a cryptographically secure random-number generator.</dd>
+<dt>Sequence Number:</dt>
+<dd>Frame-type-specific sequence information.</dd>
+<dt>Total Count:</dt>
+<dd>The number of DATA chunks in the session.</dd>
+<dt>Payload Length:</dt>
+<dd>Payload size in octets.  The maximum is 65535.</dd>
+<dt>Reserved:</dt>
+<dd>This field <bcp14>MUST</bcp14> be transmitted as zero.  A receiver <bcp14>MUST</bcp14> discard a
+frame in which it is non-zero.</dd>
+<dt>Header Extensions:</dt>
+<dd>Zero or more TLVs, as specified in <xref target="header-extensions"></xref>.</dd>
+<dt>CRC-32:</dt>
+<dd>CRC-32/ISO-HDLC over the complete header, including extensions, followed by
+the payload.  The radio preamble and synchronization word are not included.</dd>
+</dl>
+
+<section anchor="version-processing"><name>Version Processing</name>
+<t>A receiver that does not support the received Major Version <bcp14>MUST</bcp14> discard
+the frame.  A receiver <bcp14>MAY</bcp14> process a higher Minor Version when it
+understands the Frame Type and all critical flags and critical TLVs.  Unknown
+non-critical features <bcp14>MUST NOT</bcp14> by themselves cause rejection.</t>
+<t>A future specification that changes base-field interpretation or processing in
+an incompatible manner <bcp14>MUST</bcp14> allocate a new Major Version.</t>
+</section>
+
+<section anchor="flags"><name>Flags</name>
+<t>The following flag is defined:</t>
+<table>
+<thead>
+<tr>
+<th>Bit</th>
+<th>Name</th>
+<th>Semantics</th>
+</tr>
+</thead>
+
+<tbody>
+<tr>
+<td>0</td>
+<td>RETRANSMISSION</td>
+<td>The frame repeats information sent previously.</td>
+</tr>
+</tbody>
+</table><t>Bits 1 through 15 are unassigned advisory flags.  Receivers <bcp14>MUST</bcp14> ignore
+unknown advisory flags.</t>
+<t>Bits 16 through 31 are critical flags.  A receiver <bcp14>MUST</bcp14> discard a frame
+containing any critical flag it does not understand.</t>
+</section>
+</section>
+
+<section anchor="header-extensions"><name>Header Extensions</name>
+<t>Header extensions use the following TLV format:</t>
+
+<artwork><![CDATA[  0                   1                   2                   3
+  0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
+ +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+ |            TLV Type           |          TLV Length           |
+ +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+ |                         TLV Value ...                         |
+ +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+]]>
+</artwork>
+
+<dl spacing="compact">
+<dt>TLV Type:</dt>
+<dd>A 16-bit type.  Bit 15 is the Critical bit.  Bits 0 through 14 identify the
+extension type.</dd>
+<dt>TLV Length:</dt>
+<dd>Length of the value in octets, excluding the four-octet TLV header.</dd>
+<dt>TLV Value:</dt>
+<dd>Type-specific bytes.  TLVs are concatenated without alignment padding.</dd>
+</dl>
+<t>An unknown TLV with the Critical bit set <bcp14>MUST</bcp14> cause the frame to be
+discarded.  An unknown TLV without the Critical bit set <bcp14>MUST</bcp14> be ignored.
+A sender <bcp14>MUST NOT</bcp14> include two critical TLVs with the same base type unless
+the specification for that TLV explicitly permits repetition.</t>
+<t>This document defines these non-critical TLVs:</t>
+<table>
+<thead>
+<tr>
+<th>Base Type</th>
+<th>Name</th>
+<th>Value</th>
+</tr>
+</thead>
+
+<tbody>
+<tr>
+<td>1</td>
+<td>Sender ID</td>
+<td>A valid UTF-8 sender identifier.</td>
+</tr>
+
+<tr>
+<td>2</td>
+<td>Radio Profile</td>
+<td>A valid UTF-8 radio-profile name.</td>
+</tr>
+
+<tr>
+<td>3</td>
+<td>Content Hint</td>
+<td>A valid UTF-8 short description for operator display.</td>
+</tr>
+</tbody>
+</table><t>Text TLV values <bcp14>MUST</bcp14> be valid UTF-8 and <bcp14>MUST NOT</bcp14> contain a NUL octet.
+Receivers <bcp14>SHOULD</bcp14> impose a local display-length limit.</t>
+</section>
+
+<section anchor="frame-types"><name>Frame Types</name>
+
+<section anchor="manifest-frame"><name>MANIFEST Frame</name>
+<t>Frame Type 1 is MANIFEST.  Its payload is a UTF-8 JSON object conforming to
+<xref target="RFC8259"></xref>.  Sequence Number <bcp14>MUST</bcp14> be zero.  Total Count <bcp14>MUST</bcp14> equal the
+number of DATA chunks.</t>
+<t>A sender <bcp14>SHOULD</bcp14> transmit the MANIFEST more than once and <bcp14>SHOULD</bcp14> repeat
+it periodically during a long session.  A receiver <bcp14>MUST</bcp14> treat identical
+MANIFEST frames as duplicates.  If two valid manifests for the same session
+conflict, the receiver <bcp14>MUST NOT</bcp14> combine their DATA chunks unless a future
+extension defines conflict resolution.</t>
+<t>MANIFEST is optional extended, human-oriented metadata.  It is not required
+to receive or decode an object when an OBJECT_DESCRIPTOR is present.</t>
+</section>
+
+<section anchor="data-frame"><name>DATA Frame</name>
+<t>Frame Type 2 is DATA.  The payload contains one contiguous chunk of the
+encoded object.  Sequence Number is zero-based.  Total Count is the number of
+chunks in the session and <bcp14>MUST</bcp14> match the OBJECT_DESCRIPTOR.</t>
+<t>All DATA frames except the final one <bcp14>SHOULD</bcp14> have the descriptor's DATA
+Chunk Size.  The final DATA frame <bcp14>MAY</bcp14> be shorter.  A receiver <bcp14>MUST</bcp14>
+ignore a DATA frame whose Sequence Number is greater than or equal to Total
+Count.</t>
+<t>A repeated DATA frame <bcp14>MUST</bcp14> contain exactly the same payload as the earlier
+frame with the same Session ID and Sequence Number.  A receiver that observes
+conflicting valid payloads for one sequence <bcp14>MUST</bcp14> abandon or quarantine the
+session.</t>
+</section>
+
+<section anchor="end-frame"><name>END Frame</name>
+<t>Frame Type 3 is END.  Sequence Number and Total Count <bcp14>MUST</bcp14> both equal the
+number of DATA chunks.  Its payload is exactly 44 octets:</t>
+
+<artwork><![CDATA[ +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+ |                                                               |
+ +                    Encoded Size (64 bits)                     +
+ |                                                               |
+ +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+ |                    Payload CRC-32 (32 bits)                    |
+ +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+ |                                                               |
+ +                                                               +
+ |                    Payload SHA-256 (256 bits)                  |
+ +                                                               +
+ |                                                               |
+ +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+]]>
+</artwork>
+<t>The END frame is a completion hint and repeats integrity values from the
+OBJECT_DESCRIPTOR.  Receipt of END is not required for completion when the
+descriptor and all DATA chunks have already been received and verified.</t>
+</section>
+
+<section anchor="cancel-frame"><name>CANCEL Frame</name>
+<t>Frame Type 4 is CANCEL.  It indicates that the sender has abandoned the
+session.  Sequence Number and Total Count <bcp14>SHOULD</bcp14> be zero.  The payload
+<bcp14>MAY</bcp14> be empty or contain a short UTF-8 reason.  A receiver <bcp14>SHOULD</bcp14> discard
+incomplete state for the indicated Session ID.</t>
+</section>
+
+<section anchor="object-descriptor-frame"><name>OBJECT_DESCRIPTOR Frame</name>
+<t>Frame Type 5 is OBJECT_DESCRIPTOR.  It is the mandatory baseline manifest for
+RIFP 1.0.  Its fixed 56-octet payload is machine-oriented and contains all
+information needed to allocate, reassemble, validate, and decode an image:</t>
+
+<artwork><![CDATA[  0                   1                   2                   3
+  0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
+ +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+ | Desc. Version |  Encoding ID  | Pixel Format  |    Reserved   |
+ +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+ |         Width                 |          Height               |
+ +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+ |       DATA Chunk Size         |          Reserved             |
+ +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+ |                                                               |
+ +                    Encoded Size (64 bits)                     +
+ |                                                               |
+ +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+ |                    Payload CRC-32 (32 bits)                    |
+ +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+ |                                                               |
+ +                                                               +
+ |                                                               |
+ +                    Payload SHA-256 (256 bits)                  +
+ |                                                               |
+ +                                                               +
+ |                                                               |
+ +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+]]>
+</artwork>
+<t>Descriptor Version is 1.  Both Reserved fields <bcp14>MUST</bcp14> be zero.  Width and
+Height are unsigned 16-bit pixel dimensions and <bcp14>MUST</bcp14> be non-zero.  DATA
+Chunk Size is the non-zero nominal DATA payload length.  Encoded Size is the
+complete encoded object's length.  Payload CRC-32 and Payload SHA-256 cover
+the complete encoded object.  Sequence Number <bcp14>MUST</bcp14> be zero, Total Count
+<bcp14>MUST</bcp14> equal the number of DATA frames, and Payload Length <bcp14>MUST</bcp14> be 56.
+An unknown Descriptor Version <bcp14>MUST</bcp14> be rejected.</t>
+<t>The complete PDU without radio preamble or synchronization is 88 octets: a
+28-octet base header, the 56-octet descriptor, and a 4-octet frame CRC.
+Descriptor Version 1 remains fixed at 56 octets.  Future mandatory features
+require a new descriptor version, a critical header TLV or flag, or another
+descriptor frame type; unknown non-critical TLVs remain ignorable.</t>
+<t>When both OBJECT_DESCRIPTOR and MANIFEST are received, their dimensions,
+encoding, pixel format, encoded size, CRC-32, SHA-256, chunk size, and chunk
+count <bcp14>MUST</bcp14> match.  A receiver <bcp14>MUST</bcp14> reject the session on conflict.</t>
+
+<section anchor="encoding-id-registry"><name>Encoding ID Registry</name>
+<t><tt>auto</tt> is sender-side selection behavior and <bcp14>MUST NOT</bcp14> appear on the wire.</t>
+<table>
+<thead>
+<tr>
+<th>ID</th>
+<th>Encoding</th>
+<th>Media Type</th>
+</tr>
+</thead>
+
+<tbody>
+<tr>
+<td>0x01</td>
+<td>CCITT Group 3 TIFF</td>
+<td><tt>image/tiff</tt></td>
+</tr>
+
+<tr>
+<td>0x02</td>
+<td>CCITT Group 4 TIFF</td>
+<td><tt>image/tiff</tt></td>
+</tr>
+
+<tr>
+<td>0x03</td>
+<td>PNG</td>
+<td><tt>image/png</tt></td>
+</tr>
+
+<tr>
+<td>0x04</td>
+<td>JPEG</td>
+<td><tt>image/jpeg</tt></td>
+</tr>
+
+<tr>
+<td>0x05</td>
+<td>Packed raw raster</td>
+<td><tt>image/rifp-raster</tt></td>
+</tr>
+
+<tr>
+<td>0x06</td>
+<td>RLE raster</td>
+<td><tt>image/rifp-raster</tt></td>
+</tr>
+
+<tr>
+<td>0x07</td>
+<td>ZLIB raster</td>
+<td><tt>image/rifp-raster</tt></td>
+</tr>
+
+<tr>
+<td>0x80--0xFF</td>
+<td>Private use</td>
+<td>Profile-specific</td>
+</tr>
+</tbody>
+</table></section>
+
+<section anchor="pixel-format-registry"><name>Pixel Format Registry</name>
+<table>
+<thead>
+<tr>
+<th>ID</th>
+<th>Pixel Format</th>
+</tr>
+</thead>
+
+<tbody>
+<tr>
+<td>0x01</td>
+<td>1-bit grayscale</td>
+</tr>
+
+<tr>
+<td>0x02</td>
+<td>2-bit grayscale</td>
+</tr>
+
+<tr>
+<td>0x03</td>
+<td>4-bit grayscale</td>
+</tr>
+
+<tr>
+<td>0x04</td>
+<td>8-bit grayscale</td>
+</tr>
+
+<tr>
+<td>0x05</td>
+<td>RGB888</td>
+</tr>
+
+<tr>
+<td>0x06</td>
+<td>RGBA8888</td>
+</tr>
+
+<tr>
+<td>0x80--0xFF</td>
+<td>Private use</td>
+</tr>
+</tbody>
+</table><t>For TIFF, PNG, and JPEG, receivers <bcp14>MUST</bcp14> verify that decoded dimensions and
+pixel representation agree with the descriptor.</t>
+</section>
+</section>
+
+<section anchor="unknown-frame-types"><name>Unknown Frame Types</name>
+<t>A receiver <bcp14>MUST</bcp14> validate the complete header and CRC before deciding that a
+Frame Type is unknown.  It <bcp14>MUST</bcp14> then ignore the frame.  Unknown frame types
+do not invalidate other frames in the same session.</t>
+</section>
+</section>
+
+<section anchor="optional-extended-manifest-format"><name>Optional Extended Manifest Format</name>
+<t>The manifest is a JSON object encoded as UTF-8 without a byte-order mark.
+Field names and string values are case sensitive.  For interoperable JSON
+processing, integer values <bcp14>MUST</bcp14> be in the range -(2^53) + 1 through
+(2^53) - 1.  Unknown fields <bcp14>MUST</bcp14> be ignored unless a future specification
+explicitly marks them as critical through a critical header extension or
+critical flag.</t>
+<t>The following fields are required:</t>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+
+<tbody>
+<tr>
+<td><tt>protocol</tt></td>
+<td>string</td>
+<td>Exactly <tt>rifp</tt>.</td>
+</tr>
+
+<tr>
+<td><tt>protocol_version</tt></td>
+<td>string</td>
+<td>Dotted major and minor version, initially <tt>1.0</tt>.</td>
+</tr>
+
+<tr>
+<td><tt>session_id</tt></td>
+<td>string</td>
+<td>Session ID as exactly 16 lowercase hexadecimal digits.</td>
+</tr>
+
+<tr>
+<td><tt>filename</tt></td>
+<td>string</td>
+<td>Suggested source filename.</td>
+</tr>
+
+<tr>
+<td><tt>media_type</tt></td>
+<td>string</td>
+<td>Media type of the encoded object.</td>
+</tr>
+
+<tr>
+<td><tt>content_encoding</tt></td>
+<td>string</td>
+<td>Registered RIFP encoding name.</td>
+</tr>
+
+<tr>
+<td><tt>width</tt></td>
+<td>integer</td>
+<td>Decoded image width in pixels.</td>
+</tr>
+
+<tr>
+<td><tt>height</tt></td>
+<td>integer</td>
+<td>Decoded image height in pixels.</td>
+</tr>
+
+<tr>
+<td><tt>bits_per_pixel</tt></td>
+<td>integer</td>
+<td>Nominal decoded grayscale depth.</td>
+</tr>
+
+<tr>
+<td><tt>encoded_size</tt></td>
+<td>integer</td>
+<td>Complete encoded object size in octets.</td>
+</tr>
+
+<tr>
+<td><tt>payload_crc32</tt></td>
+<td>integer</td>
+<td>Unsigned CRC-32 of the complete object.</td>
+</tr>
+
+<tr>
+<td><tt>payload_sha256</tt></td>
+<td>string</td>
+<td>Lowercase hexadecimal SHA-256 digest.</td>
+</tr>
+
+<tr>
+<td><tt>chunk_size</tt></td>
+<td>integer</td>
+<td>Nominal DATA payload size in octets.</td>
+</tr>
+
+<tr>
+<td><tt>chunk_count</tt></td>
+<td>integer</td>
+<td>Number of DATA chunks.</td>
+</tr>
+</tbody>
+</table><t>The following fields are optional:</t>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+
+<tbody>
+<tr>
+<td><tt>raw_size</tt></td>
+<td>integer</td>
+<td>Size of the uncompressed packed raster.</td>
+</tr>
+
+<tr>
+<td><tt>created</tt></td>
+<td>string</td>
+<td>UTC timestamp in Internet date-time format <xref target="RFC3339"></xref>.</td>
+</tr>
+
+<tr>
+<td><tt>radio_profile</tt></td>
+<td>string</td>
+<td>Radio-profile name used by the sender.</td>
+</tr>
+
+<tr>
+<td><tt>extensions</tt></td>
+<td>object</td>
+<td>Namespaced manifest extensions.</td>
+</tr>
+</tbody>
+</table><t>The receiver <bcp14>MUST</bcp14> verify that <tt>session_id</tt> matches the binary header and
+that <tt>chunk_count</tt> matches Total Count.  It <bcp14>MUST</bcp14> reject dimensions, sizes,
+or chunk counts that exceed local resource limits.</t>
+<t>An example manifest follows:</t>
+
+<sourcecode type="json"><![CDATA[{
+  "bits_per_pixel": 1,
+  "chunk_count": 2,
+  "chunk_size": 192,
+  "content_encoding": "ccitt-group4",
+  "created": "2026-07-25T08:00:00Z",
+  "encoded_size": 246,
+  "extensions": {
+    "org.example.camera": {
+      "position": "north"
+    }
+  },
+  "filename": "weather-map.png",
+  "height": 96,
+  "media_type": "image/tiff",
+  "payload_crc32": 188765321,
+  "payload_sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+  "protocol": "rifp",
+  "protocol_version": "1.0",
+  "radio_profile": "rifp-cpfsk-4800",
+  "raw_size": 1536,
+  "session_id": "0123456789abcdef",
+  "width": 128
+}
+]]>
+</sourcecode>
+<t>Extension keys in <tt>extensions</tt> <bcp14>SHOULD</bcp14> use a reverse-domain or URI-based
+namespace controlled by the extension author.  An extension that is required
+to decode or authenticate the object <bcp14>MUST</bcp14> also be signaled by a critical
+header TLV or critical flag so that an older receiver cannot silently ignore
+it.</t>
+
+<section anchor="initial-media-and-encoding-combinations"><name>Initial Media and Encoding Combinations</name>
+<table>
+<thead>
+<tr>
+<th>Media Type</th>
+<th>Content Encoding</th>
+<th>Meaning</th>
+</tr>
+</thead>
+
+<tbody>
+<tr>
+<td><tt>image/tiff</tt></td>
+<td><tt>ccitt-group3</tt></td>
+<td>TIFF containing CCITT Group 3 facsimile data.</td>
+</tr>
+
+<tr>
+<td><tt>image/tiff</tt></td>
+<td><tt>ccitt-group4</tt></td>
+<td>TIFF containing CCITT Group 4 facsimile data.</td>
+</tr>
+
+<tr>
+<td><tt>image/png</tt></td>
+<td><tt>identity</tt></td>
+<td>Complete PNG file.</td>
+</tr>
+
+<tr>
+<td><tt>image/jpeg</tt></td>
+<td><tt>identity</tt></td>
+<td>Complete JPEG file.</td>
+</tr>
+
+<tr>
+<td><tt>image/rifp-raster</tt></td>
+<td><tt>raw</tt></td>
+<td>Packed grayscale raster.</td>
+</tr>
+
+<tr>
+<td><tt>image/rifp-raster</tt></td>
+<td><tt>rle8</tt></td>
+<td>Byte-oriented run-length encoding of the packed raster.</td>
+</tr>
+
+<tr>
+<td><tt>image/rifp-raster</tt></td>
+<td><tt>zlib</tt></td>
+<td>ZLIB-compressed packed raster <xref target="RFC1950"></xref>.</td>
+</tr>
+</tbody>
+</table><t>For the vendor raster media type, pixels are in row-major order from top left
+to bottom right.  Supported grayscale depths are 1, 2, 4, and 8 bits per pixel.
+Samples are packed most significant sample first.  Rows are not separately
+padded; only the complete pixel sequence is padded with zero-valued samples to
+an octet boundary.</t>
+<t>The <tt>rle8</tt> encoding represents each run as two octets: an unsigned run length
+from 1 through 255 followed by the repeated octet value.  A zero run length is
+invalid.</t>
+</section>
+</section>
+
+<section anchor="fragmentation-repetition-and-reassembly"><name>Fragmentation, Repetition, and Reassembly</name>
+<t>The sender chooses a fixed nominal chunk size for a session.  Small chunks
+reduce the cost of losing one frame but increase header overhead.  The initial
+CPFSK profile recommends 192 payload octets per DATA frame.</t>
+<t>A receiver maintains reassembly state keyed by Session ID.  It <bcp14>MUST</bcp14> accept
+valid DATA chunks before the OBJECT_DESCRIPTOR arrives, subject to local resource
+limits.  It <bcp14>MUST</bcp14> de-duplicate frames by at least Session ID, Frame Type,
+Sequence Number, and content.</t>
+<t>A receiver completes a session only when:</t>
+
+<ul spacing="compact">
+<li>a valid OBJECT_DESCRIPTOR is available;</li>
+<li>every DATA Sequence Number from zero through <tt>chunk_count - 1</tt> is present;</li>
+<li>concatenation yields exactly <tt>encoded_size</tt> octets;</li>
+<li>CRC-32 matches <tt>payload_crc32</tt>; and</li>
+<li>SHA-256 matches <tt>payload_sha256</tt>.</li>
+</ul>
+<t>The CRC protects against accidental corruption and assists efficient rejection.
+SHA-256 provides stronger object-integrity checking but does not authenticate
+the sender <xref target="RFC6234"></xref>.</t>
+<t>A receiver <bcp14>SHOULD</bcp14> expire incomplete sessions, limit the number of concurrent
+sessions, limit total buffered bytes, and limit decoded image dimensions.</t>
+</section>
+
+<section anchor="crc-32"><name>CRC-32</name>
+<t>RIFP uses CRC-32/ISO-HDLC, also commonly called the Ethernet or ZIP CRC-32.  It
+uses the polynomial 0x04C11DB7 in reflected form, initial value 0xFFFFFFFF,
+reflected input and output, and final XOR 0xFFFFFFFF.</t>
+<t>The check value for the ASCII octets <tt>123456789</tt> is 0xCBF43926.</t>
+<t>The CRC field itself is transmitted as a 32-bit network-order integer and is
+not included in the calculation.</t>
+</section>
+
+<section anchor="initial-radio-profile-rifp-cpfsk-4800"><name>Initial Radio Profile: rifp-cpfsk-4800</name>
+<t>RIFP does not assign a carrier frequency.  Deployments <bcp14>MUST</bcp14> comply with the
+frequency, power, bandwidth, duty-cycle, equipment, and licensing rules that
+apply in their jurisdiction.</t>
+<t>The <tt>rifp-cpfsk-4800</tt> profile has these parameters:</t>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Value</th>
+</tr>
+</thead>
+
+<tbody>
+<tr>
+<td>Modulation</td>
+<td>Continuous-phase binary FSK</td>
+</tr>
+
+<tr>
+<td>Symbol rate</td>
+<td>4800 symbols per second</td>
+</tr>
+
+<tr>
+<td>Mark deviation</td>
+<td>+4000 Hz</td>
+</tr>
+
+<tr>
+<td>Space deviation</td>
+<td>-4000 Hz</td>
+</tr>
+
+<tr>
+<td>Symbol mapping</td>
+<td>bit 1 is mark; bit 0 is space</td>
+</tr>
+
+<tr>
+<td>Bit order</td>
+<td>Most significant bit first</td>
+</tr>
+
+<tr>
+<td>Preamble</td>
+<td>48 octets of 0x55</td>
+</tr>
+
+<tr>
+<td>Sync word</td>
+<td>0xD391C5A7</td>
+</tr>
+
+<tr>
+<td>Recommended occupied channel bandwidth</td>
+<td>25 kHz</td>
+</tr>
+
+<tr>
+<td>Recommended IQ sample rate</td>
+<td>96000 samples per second</td>
+</tr>
+</tbody>
+</table><t>Continuous phase is maintained throughout one transmitted frame.  Phase need
+not be continuous between frames.  The preamble and sync word precede every
+frame and are not part of the RIFP CRC calculation.</t>
+<t>A sender <bcp14>MAY</bcp14> use a different sample rate when it is an integer multiple of
+the symbol rate.  Sample rate is an implementation property and is not sent
+over the air.</t>
+<t>A receiver can discover a transmission by energy detection followed by search
+for the synchronization word and validation of a complete RIFP frame.  Energy
+detection alone is not sufficient to identify a RIFP signal.</t>
+</section>
+
+<section anchor="extensibility-model"><name>Extensibility Model</name>
+<t>RIFP provides four extension mechanisms:</t>
+
+<ol spacing="compact">
+<li>Minor versions for backward-compatible clarifications and additions.</li>
+<li>Advisory and critical header flags.</li>
+<li>Advisory and critical header TLVs.</li>
+<li>Namespaced manifest members and registered media encodings.</li>
+</ol>
+<t>A specification defining a new feature <bcp14>MUST</bcp14> state whether older receivers
+can safely ignore it.  Features affecting decryption, decompression,
+authentication, chunk interpretation, or object integrity normally require a
+critical flag or TLV.</t>
+<t>Potential future extensions include:</t>
+
+<ul spacing="compact">
+<li>forward-error-correction blocks;</li>
+<li>selective repair requests and acknowledgements;</li>
+<li>digital signatures and sender certificates;</li>
+<li>authenticated encryption;</li>
+<li>fountain or rateless coding;</li>
+<li>multiple objects in one session;</li>
+<li>colour and multispectral raster profiles; and</li>
+<li>radio profiles using LoRa, GMSK, OFDM, audio FSK, or wired transports.</li>
+</ul>
+</section>
+
+<section anchor="security-considerations"><name>Security Considerations</name>
+<t>RIFP's CRC and SHA-256 fields provide error detection and object consistency.
+They do not identify the sender and do not prevent deliberate modification by
+an attacker capable of replacing all frames and integrity values.</t>
+<t>Unlicensed and shared radio channels are susceptible to eavesdropping,
+spoofing, replay, traffic analysis, interference, and intentional jamming.
+Applications requiring confidentiality or source authentication <bcp14>MUST</bcp14> use a
+future authenticated-encryption or signature extension, or provide equivalent
+protection outside RIFP.</t>
+<t>Session IDs are not secrets.  Random generation reduces accidental collision
+and makes casual injection into an active session less convenient, but it is
+not an authentication mechanism.</t>
+<t>Receivers process attacker-controlled metadata and compressed image data.
+Implementations <bcp14>MUST</bcp14>:</t>
+
+<ul spacing="compact">
+<li>bound manifest size, object size, dimensions, chunk count, concurrent
+sessions, and decompression output;</li>
+<li>reject malformed UTF-8 and malformed JSON;</li>
+<li>protect image decoders against decompression bombs and memory exhaustion;</li>
+<li>sanitize filenames and never use a received filename as an unrestricted
+filesystem path;</li>
+<li>avoid executing or interpreting received metadata as code; and</li>
+<li>reject unknown critical flags and TLVs.</li>
+</ul>
+<t>A receiver should assume that duplicate, reordered, conflicting, and truncated
+frames are normal hostile inputs rather than exceptional conditions.</t>
+</section>
+
+<section anchor="privacy-considerations"><name>Privacy Considerations</name>
+<t>Image content, filenames, sender identifiers, timestamps, and transmission
+patterns are visible to passive observers in the base protocol.  A stable
+Sender ID can enable long-term tracking.  Deployments <bcp14>SHOULD</bcp14> omit optional
+identifiers that are not operationally necessary.</t>
+</section>
+
+<section anchor="iana-considerations"><name>IANA Considerations</name>
+<t>IANA is requested to create a top-level registry named &quot;Radio Image Framing
+Protocol (RIFP) Parameters&quot; containing the following subregistries.
+Registration procedures use the terminology of <xref target="RFC8126"></xref>.</t>
+
+<section anchor="rifp-frame-types"><name>RIFP Frame Types</name>
+<t>The registry contains 8-bit values.  Values 0x00 and 0xFF are Reserved.
+Values 0x01 through 0x3F require Specification Required.  Values 0x40 through
+0x7F are for Experimental Use.  Values 0x80 through 0xFE are for Private Use.</t>
+<t>Initial registrations are MANIFEST (0x01), DATA (0x02), END (0x03), CANCEL
+(0x04), and OBJECT_DESCRIPTOR (0x05), all referencing this document.</t>
+</section>
+
+<section anchor="rifp-header-tlv-base-types"><name>RIFP Header TLV Base Types</name>
+<t>The registry contains 15-bit values because the high bit is the Critical bit.
+Value 0 is Reserved.  Values 1 through 16383 require Specification Required.
+Values 16384 through 32766 are for Private Use.  Value 32767 is Reserved.</t>
+<t>Initial registrations are Sender ID (1), Radio Profile (2), and Content Hint
+(3), all referencing this document.</t>
+</section>
+
+<section anchor="rifp-flags"><name>RIFP Flags</name>
+<t>The registry records flag bit numbers, names, whether the bit is advisory or
+critical, and references.  Bits 0 through 15 are advisory and bits 16 through
+31 are critical.  Registration requires Specification Required.</t>
+<t>The initial registration is RETRANSMISSION at bit 0.</t>
+</section>
+
+<section anchor="rifp-content-encodings"><name>RIFP Content Encodings</name>
+<t>Encoding names are case-sensitive ASCII strings.  Registration requires
+Specification Required.  Each registration records compatible media types and
+a reference.</t>
+<t>Initial registrations are <tt>identity</tt>, <tt>ccitt-group3</tt>, <tt>ccitt-group4</tt>, <tt>raw</tt>,
+<tt>rle8</tt>, and <tt>zlib</tt>.</t>
+</section>
+
+<section anchor="rifp-object-encoding-ids"><name>RIFP Object Encoding IDs</name>
+<t>The registry contains 8-bit values.  Values 0x01 through 0x07 are assigned as
+specified in the Encoding ID Registry above, values 0x08 through 0x7F require
+Specification Required, and values 0x80 through 0xFF are for Private Use.</t>
+</section>
+
+<section anchor="rifp-pixel-format-ids"><name>RIFP Pixel Format IDs</name>
+<t>The registry contains 8-bit values.  Values 0x01 through 0x06 are assigned as
+specified in the Pixel Format Registry above, values 0x07 through 0x7F require
+Specification Required, and values 0x80 through 0xFF are for Private Use.</t>
+</section>
+
+<section anchor="image-rifp-raster-media-type"><name>image/rifp-raster Media Type</name>
+<t>IANA is requested to register the following media type according to
+<xref target="RFC6838"></xref>.</t>
+
+<dl spacing="compact">
+<dt>Type name:</dt>
+<dd>image</dd>
+<dt>Subtype name:</dt>
+<dd>rifp-raster</dd>
+<dt>Required parameters:</dt>
+<dd>None.</dd>
+<dt>Optional parameters:</dt>
+<dd>None.</dd>
+<dt>Encoding considerations:</dt>
+<dd>Binary.</dd>
+<dt>Security considerations:</dt>
+<dd>See the Security Considerations section of this document.  The dimensions
+and sample depth can cause large allocations, and encoded forms can expand
+substantially during decompression.</dd>
+<dt>Interoperability considerations:</dt>
+<dd>Pixel packing and grayscale depths are defined in this document.  The RIFP
+<tt>content_encoding</tt> value identifies raw, RLE8, or ZLIB representation.</dd>
+<dt>Published specification:</dt>
+<dd>This document.</dd>
+<dt>Applications that use this media type:</dt>
+<dd>RIFP senders, receivers, gateways, and diagnostic tools.</dd>
+<dt>Fragment identifier considerations:</dt>
+<dd>None.</dd>
+<dt>Additional information:</dt>
+<dd>No deprecated alias, file extension, or Macintosh file type is defined.</dd>
+<dt>Person and email address to contact for further information:</dt>
+<dd>Alexandre Dulaunoy, CIRCL.</dd>
+<dt>Intended usage:</dt>
+<dd>COMMON.</dd>
+<dt>Restrictions on usage:</dt>
+<dd>None.</dd>
+<dt>Author:</dt>
+<dd>Alexandre Dulaunoy.</dd>
+<dt>Change controller:</dt>
+<dd>IETF.</dd>
+</dl>
+</section>
+
+<section anchor="rifp-radio-profiles"><name>RIFP Radio Profiles</name>
+<t>Profile names are case-sensitive ASCII strings.  Names beginning with <tt>x-</tt> are
+for Private Use.  Other registrations require Specification Required.</t>
+<t>The initial registration is <tt>rifp-cpfsk-4800</tt>.</t>
+</section>
+</section>
+
+<section anchor="implementation-status"><name>Implementation Status</name>
+<t>This section is included while the document is an Internet-Draft and can be
+removed before publication.</t>
+<t>A Python reference implementation <xref target="RIFP-IMPLEMENTATION"></xref> supports:</t>
+
+<ul spacing="compact">
+<li>OBJECT_DESCRIPTOR, optional MANIFEST, DATA, END, and CANCEL parsing;</li>
+<li>extensible headers and unknown-critical-extension rejection;</li>
+<li>CCITT Group 3 and Group 4 TIFF, PNG, JPEG, raw, RLE, and ZLIB payloads;</li>
+<li>CPFSK generation and reception through SoapySDR;</li>
+<li>raw complex64 IQ loopback files;</li>
+<li>wideband energy discovery followed by sync and CRC validation;</li>
+<li>image scaling, grayscale quantization, and periodic directory transmission;</li>
+<li>complete-object CRC-32 and SHA-256 verification; and</li>
+<li>receiver resource limits and filename sanitization.</li>
+</ul>
+</section>
+
+<section anchor="test-vector"><name>Test Vector</name>
+<t>This test vector omits the radio-profile preamble and synchronization word.
+It is a DATA frame with Session ID 0x0123456789ABCDEF, Sequence Number 1,
+Total Count 2, no flags, no extensions, and the three-octet payload <tt>abc</tt>.</t>
+
+<artwork><![CDATA[Base header:
+0100021c000000000123456789abcdef000000010000000200030000
+
+Payload:
+616263
+
+CRC-32:
+ed2bb111
+
+Complete frame after sync word:
+0100021c000000000123456789abcdef000000010000000200030000
+616263ed2bb111
+]]>
+</artwork>
+</section>
+
+<section anchor="references"><name>References</name>
+</section>
+
+</middle>
+
+<back>
+<references><name>References</name>
+<references><name>Normative References</name>
+<xi:include href="https://bib.ietf.org/public/rfc/bibxml/reference.RFC.1950.xml"/>
+<xi:include href="https://bib.ietf.org/public/rfc/bibxml/reference.RFC.2119.xml"/>
+<xi:include href="https://bib.ietf.org/public/rfc/bibxml/reference.RFC.3339.xml"/>
+<xi:include href="https://bib.ietf.org/public/rfc/bibxml/reference.RFC.6234.xml"/>
+<xi:include href="https://bib.ietf.org/public/rfc/bibxml/reference.RFC.6838.xml"/>
+<xi:include href="https://bib.ietf.org/public/rfc/bibxml/reference.RFC.8126.xml"/>
+<xi:include href="https://bib.ietf.org/public/rfc/bibxml/reference.RFC.8174.xml"/>
+<xi:include href="https://bib.ietf.org/public/rfc/bibxml/reference.RFC.8259.xml"/>
+</references>
+<references><name>Informative References</name>
+<reference anchor="RIFP-IMPLEMENTATION" target="https://github.com/adulau/rifp">
+  <front>
+    <title>Radio Image Framing Protocol</title>
+    <author fullname="RIFP Python Implementation" surname="RIFP-IMPLEMENTATION"></author>
+    <date></date>
+  </front>
+</reference>
+</references>
+</references>
+
+<section anchor="acknowledgements"><name>Acknowledgements</name>
+<t>The author thanks the amateur-radio, software-defined-radio, facsimile, and
+open-source communities whose experiments motivated this protocol design.</t>
+</section>
+
+</back>
+
+</rfc>

@@ -1,0 +1,2849 @@
+<!DOCTYPE html>
+<html lang="en" class="Internet-Draft">
+<head>
+<meta charset="utf-8">
+<meta content="Common,Latin" name="scripts">
+<meta content="initial-scale=1.0" name="viewport">
+<title>Radio Image Framing Protocol (RIFP)</title>
+<meta content="Alexandre Dulaunoy" name="author">
+<meta content="
+       This document specifies the Radio Image Framing Protocol (RIFP), a compact,
+unidirectional object-transfer protocol intended for transmitting images over
+low-rate radio links.  RIFP defines independently synchronized frames, a
+versioned and extensible binary header, fragmentation and reassembly rules, a
+fixed binary object descriptor, optional JSON metadata, per-frame CRC-32
+protection, whole-object SHA-256 verification,
+and registries for future frame types, flags, header extensions, media
+encodings, and radio profiles. 
+       RIFP is independent of a particular frequency allocation or modulation.  This
+document also defines an initial continuous-phase binary frequency-shift keying
+profile named  rifp-cpfsk-4800 .  The profile can be used on frequencies where
+local regulation permits such operation; 433.92 MHz is a common deployment
+example but is not mandated by this specification. 
+    " name="description">
+<meta content="xml2rfc 3.21.0" name="generator">
+<meta content="radio" name="keyword">
+<meta content="image" name="keyword">
+<meta content="facsimile" name="keyword">
+<meta content="FSK" name="keyword">
+<meta content="fragmentation" name="keyword">
+<meta content="draft-dulaunoy-rifp-01" name="ietf.draft">
+<!-- Generator version information:
+  xml2rfc 3.21.0
+    Python 3.10.12
+    ConfigArgParse 1.7
+    google-i18n-address 3.1.0
+    intervaltree 3.1.0
+    Jinja2 3.1.6
+    lxml 4.9.2
+    platformdirs 4.1.0
+    pycountry 24.6.1
+    PyYAML 6.0.1
+    requests 2.33.0
+    setuptools 80.10.2
+    six 1.16.0
+    wcwidth 0.2.13
+    weasyprint 65.1
+-->
+<link href="draft-dulaunoy-rifp-00.xml" rel="alternate" type="application/rfc+xml">
+<link href="#copyright" rel="license">
+<style type="text/css">/*
+
+  NOTE: Changes at the bottom of this file overrides some earlier settings.
+
+  Once the style has stabilized and has been adopted as an official RFC style,
+  this can be consolidated so that style settings occur only in one place, but
+  for now the contents of this file consists first of the initial CSS work as
+  provided to the RFC Formatter (xml2rfc) work, followed by itemized and
+  commented changes found necessary during the development of the v3
+  formatters.
+
+*/
+
+/* fonts */
+@import url('https://fonts.googleapis.com/css?family=Noto+Sans'); /* Sans-serif */
+@import url('https://fonts.googleapis.com/css?family=Noto+Serif'); /* Serif (print) */
+@import url('https://fonts.googleapis.com/css?family=Roboto+Mono'); /* Monospace */
+
+:root {
+  --font-sans: 'Noto Sans', Arial, Helvetica, sans-serif;
+  --font-serif: 'Noto Serif', 'Times', 'Times New Roman', serif;
+  --font-mono: 'Roboto Mono', Courier, 'Courier New', monospace;
+}
+
+@viewport {
+  zoom: 1.0;
+}
+@-ms-viewport {
+  width: extend-to-zoom;
+  zoom: 1.0;
+}
+/* general and mobile first */
+html {
+}
+body {
+  max-width: 90%;
+  margin: 1.5em auto;
+  color: #222;
+  background-color: #fff;
+  font-size: 14px;
+  font-family: var(--font-sans);
+  line-height: 1.6;
+  scroll-behavior: smooth;
+  overflow-wrap: break-word;
+}
+.ears {
+  display: none;
+}
+
+/* headings */
+#title, h1, h2, h3, h4, h5, h6 {
+  margin: 1em 0 0.5em;
+  font-weight: bold;
+  line-height: 1.3;
+}
+#title {
+  clear: both;
+  border-bottom: 1px solid #ddd;
+  margin: 0 0 0.5em 0;
+  padding: 1em 0 0.5em;
+}
+.author {
+  padding-bottom: 4px;
+}
+h1 {
+  font-size: 26px;
+  margin: 1em 0;
+}
+h2 {
+  font-size: 22px;
+  margin-top: -20px;  /* provide offset for in-page anchors */
+  padding-top: 33px;
+}
+h3 {
+  font-size: 18px;
+  margin-top: -36px;  /* provide offset for in-page anchors */
+  padding-top: 42px;
+}
+h4 {
+  font-size: 16px;
+  margin-top: -36px;  /* provide offset for in-page anchors */
+  padding-top: 42px;
+}
+h5, h6 {
+  font-size: 14px;
+}
+#n-copyright-notice {
+  border-bottom: 1px solid #ddd;
+  padding-bottom: 1em;
+  margin-bottom: 1em;
+}
+/* general structure */
+p {
+  padding: 0;
+  margin: 0 0 1em 0;
+  text-align: left;
+}
+div, span {
+  position: relative;
+}
+div {
+  margin: 0;
+}
+.alignRight.art-text {
+  background-color: #f9f9f9;
+  border: 1px solid #eee;
+  border-radius: 3px;
+  padding: 1em 1em 0;
+  margin-bottom: 1.5em;
+}
+.alignRight.art-text pre {
+  padding: 0;
+}
+.alignRight {
+  margin: 1em 0;
+}
+.alignRight > *:first-child {
+  border: none;
+  margin: 0;
+  float: right;
+  clear: both;
+}
+.alignRight > *:nth-child(2) {
+  clear: both;
+  display: block;
+  border: none;
+}
+svg {
+  display: block;
+}
+svg[font-family~="serif" i], svg [font-family~="serif" i] {
+  font-family: var(--font-serif);
+}
+svg[font-family~="sans-serif" i], svg [font-family~="sans-serif" i] {
+  font-family: var(--font-sans);
+}
+svg[font-family~="monospace" i], svg [font-family~="monospace" i] {
+  font-family: var(--font-mono);
+}
+.alignCenter.art-text {
+  background-color: #f9f9f9;
+  border: 1px solid #eee;
+  border-radius: 3px;
+  padding: 1em 1em 0;
+  margin-bottom: 1.5em;
+}
+.alignCenter.art-text pre {
+  padding: 0;
+}
+.alignCenter {
+  margin: 1em 0;
+}
+.alignCenter > *:first-child {
+  display: table;
+  border: none;
+  margin: 0 auto;
+}
+
+/* lists */
+ol, ul {
+  padding: 0;
+  margin: 0 0 1em 2em;
+}
+ol ol, ul ul, ol ul, ul ol {
+  margin-left: 1em;
+}
+li {
+  margin: 0 0 0.25em 0;
+}
+.ulCompact li {
+  margin: 0;
+}
+ul.empty, .ulEmpty {
+  list-style-type: none;
+}
+ul.empty li, .ulEmpty li {
+  margin-top: 0.5em;
+}
+ul.ulBare, li.ulBare {
+  margin-left: 0em !important;
+}
+ul.compact, .ulCompact,
+ol.compact, .olCompact {
+  line-height: 100%;
+  margin: 0 0 0 2em;
+}
+
+/* definition lists */
+dl {
+}
+dl > dt {
+  float: left;
+  margin-right: 1em;
+}
+/* 
+dl.nohang > dt {
+  float: none;
+}
+*/
+dl > dd {
+  margin-bottom: .8em;
+  min-height: 1.3em;
+}
+dl.compact > dd, .dlCompact > dd {
+  margin-bottom: 0em;
+}
+dl > dd > dl {
+  margin-top: 0.5em;
+  margin-bottom: 0em;
+}
+
+/* links */
+a {
+  text-decoration: none;
+}
+a[href] {
+  color: #22e; /* Arlen: WCAG 2019 */
+}
+a[href]:hover {
+  background-color: #f2f2f2;
+}
+figcaption a[href],
+a[href].selfRef {
+  color: #222;
+}
+/* XXX probably not this:
+a.selfRef:hover {
+  background-color: transparent;
+  cursor: default;
+} */
+
+/* Figures */
+tt, code, pre {
+  background-color: #f9f9f9;
+  font-family: var(--font-mono);
+}
+pre {
+  border: 1px solid #eee;
+  margin: 0;
+  padding: 1em;
+}
+img {
+  max-width: 100%;
+}
+figure {
+  margin: 0;
+}
+figure blockquote {
+  margin: 0.8em 0.4em 0.4em;
+}
+figcaption {
+  font-style: italic;
+  margin: 0 0 1em 0;
+}
+@media screen {
+  pre {
+    overflow-x: auto;
+    max-width: 100%;
+    max-width: calc(100% - 22px);
+  }
+}
+
+/* aside, blockquote */
+aside, blockquote {
+  margin-left: 0;
+  padding: 1.2em 2em;
+}
+blockquote {
+  background-color: #f9f9f9;
+  color: #111; /* Arlen: WCAG 2019 */
+  border: 1px solid #ddd;
+  border-radius: 3px;
+  margin: 1em 0;
+}
+blockquote > *:last-child {
+  margin-bottom: 0;
+}
+cite {
+  display: block;
+  text-align: right;
+  font-style: italic;
+}
+.xref {
+  overflow-wrap: normal;
+}
+
+/* tables */
+table {
+  width: 100%;
+  margin: 0 0 1em;
+  border-collapse: collapse;
+  border: 1px solid #eee;
+}
+th, td {
+  text-align: left;
+  vertical-align: top;
+  padding: 0.5em 0.75em;
+}
+th {
+  text-align: left;
+  background-color: #e9e9e9;
+}
+tr:nth-child(2n+1) > td {
+  background-color: #f5f5f5;
+}
+table caption {
+  font-style: italic;
+  margin: 0;
+  padding: 0;
+  text-align: left;
+}
+table p {
+  /* XXX to avoid bottom margin on table row signifiers. If paragraphs should
+     be allowed within tables more generally, it would be far better to select on a class. */
+  margin: 0;
+}
+
+/* pilcrow */
+a.pilcrow {
+  color: #666; /* Arlen: AHDJ 2019 */
+  text-decoration: none;
+  visibility: hidden;
+  user-select: none;
+  -ms-user-select: none;
+  -o-user-select:none;
+  -moz-user-select: none;
+  -khtml-user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+@media screen {
+  aside:hover > a.pilcrow,
+  p:hover > a.pilcrow,
+  blockquote:hover > a.pilcrow,
+  div:hover > a.pilcrow,
+  li:hover > a.pilcrow,
+  pre:hover > a.pilcrow {
+    visibility: visible;
+  }
+  a.pilcrow:hover {
+    background-color: transparent;
+  }
+}
+
+/* misc */
+hr {
+  border: 0;
+  border-top: 1px solid #eee;
+}
+.bcp14 {
+  font-variant: small-caps;
+}
+
+.role {
+  font-variant: all-small-caps;
+}
+
+/* info block */
+#identifiers {
+  margin: 0;
+  font-size: 0.9em;
+}
+#identifiers dt {
+  width: 3em;
+  clear: left;
+}
+#identifiers dd {
+  float: left;
+  margin-bottom: 0;
+}
+/* Fix PDF info block run off issue */
+@media print {
+  #identifiers dd {
+    float: none;
+  }
+}
+#identifiers .authors .author {
+  display: inline-block;
+  margin-right: 1.5em;
+}
+#identifiers .authors .org {
+  font-style: italic;
+}
+
+/* The prepared/rendered info at the very bottom of the page */
+.docInfo {
+  color: #666; /* Arlen: WCAG 2019 */
+  font-size: 0.9em;
+  font-style: italic;
+  margin-top: 2em;
+}
+.docInfo .prepared {
+  float: left;
+}
+.docInfo .prepared {
+  float: right;
+}
+
+/* table of contents */
+#toc  {
+  padding: 0.75em 0 2em 0;
+  margin-bottom: 1em;
+}
+nav.toc ul {
+  margin: 0 0.5em 0 0;
+  padding: 0;
+  list-style: none;
+}
+nav.toc li {
+  line-height: 1.3em;
+  margin: 0.75em 0;
+  padding-left: 1.2em;
+  text-indent: -1.2em;
+}
+/* references */
+.references dt {
+  text-align: right;
+  font-weight: bold;
+  min-width: 7em;
+}
+.references dd {
+  margin-left: 8em;
+  overflow: auto;
+}
+
+.refInstance {
+  margin-bottom: 1.25em;
+}
+
+.refSubseries {
+  margin-bottom: 1.25em;
+}
+
+.references .ascii {
+  margin-bottom: 0.25em;
+}
+
+/* index */
+.index ul {
+  margin: 0 0 0 1em;
+  padding: 0;
+  list-style: none;
+}
+.index ul ul {
+  margin: 0;
+}
+.index li {
+  margin: 0;
+  text-indent: -2em;
+  padding-left: 2em;
+  padding-bottom: 5px;
+}
+.indexIndex {
+  margin: 0.5em 0 1em;
+}
+.index a {
+  font-weight: 700;
+}
+/* make the index two-column on all but the smallest screens */
+@media (min-width: 600px) {
+  .index ul {
+    -moz-column-count: 2;
+    -moz-column-gap: 20px;
+  }
+  .index ul ul {
+    -moz-column-count: 1;
+    -moz-column-gap: 0;
+  }
+}
+
+/* authors */
+address.vcard {
+  font-style: normal;
+  margin: 1em 0;
+}
+
+address.vcard .nameRole {
+  font-weight: 700;
+  margin-left: 0;
+}
+address.vcard .label {
+  font-family: var(--font-sans);
+  margin: 0.5em 0;
+}
+address.vcard .type {
+  display: none;
+}
+.alternative-contact {
+  margin: 1.5em 0 1em;
+}
+hr.addr {
+  border-top: 1px dashed;
+  margin: 0;
+  color: #ddd;
+  max-width: calc(100% - 16px);
+}
+
+/* temporary notes */
+.rfcEditorRemove::before {
+  position: absolute;
+  top: 0.2em;
+  right: 0.2em;
+  padding: 0.2em;
+  content: "The RFC Editor will remove this note";
+  color: #9e2a00; /* Arlen: WCAG 2019 */
+  background-color: #ffd; /* Arlen: WCAG 2019 */
+}
+.rfcEditorRemove {
+  position: relative;
+  padding-top: 1.8em;
+  background-color: #ffd; /* Arlen: WCAG 2019 */
+  border-radius: 3px;
+}
+.cref {
+  background-color: #ffd; /* Arlen: WCAG 2019 */
+  padding: 2px 4px;
+}
+.crefSource {
+  font-style: italic;
+}
+/* alternative layout for smaller screens */
+@media screen and (max-width: 1023px) {
+  body {
+    padding-top: 2em;
+  }
+  #title {
+    padding: 1em 0;
+  }
+  h1 {
+    font-size: 24px;
+  }
+  h2 {
+    font-size: 20px;
+    margin-top: -18px;  /* provide offset for in-page anchors */
+    padding-top: 38px;
+  }
+  #identifiers dd {
+    max-width: 60%;
+  }
+  #toc {
+    position: fixed;
+    z-index: 2;
+    top: 0;
+    right: 0;
+    padding: 0;
+    margin: 0;
+    background-color: inherit;
+    border-bottom: 1px solid #ccc;
+  }
+  #toc h2 {
+    margin: -1px 0 0 0;
+    padding: 4px 0 4px 6px;
+    padding-right: 1em;
+    min-width: 190px;
+    font-size: 1.1em;
+    text-align: right;
+    background-color: #444;
+    color: white;
+    cursor: pointer;
+  }
+  #toc h2::before { /* css hamburger */
+    float: right;
+    position: relative;
+    width: 1em;
+    height: 1px;
+    left: -164px;
+    margin: 6px 0 0 0;
+    background: white none repeat scroll 0 0;
+    box-shadow: 0 4px 0 0 white, 0 8px 0 0 white;
+    content: "";
+  }
+  #toc nav {
+    display: none;
+    padding: 0.5em 1em 1em;
+    overflow: auto;
+    height: calc(100vh - 48px);
+    border-left: 1px solid #ddd;
+  }
+}
+
+/* alternative layout for wide screens */
+@media screen and (min-width: 1024px) {
+  body {
+    max-width: 724px;
+    margin: 42px auto;
+    padding-left: 1.5em;
+    padding-right: 29em;
+  }
+  #toc {
+    position: fixed;
+    top: 42px;
+    right: 42px;
+    width: 25%;
+    margin: 0;
+    padding: 0 1em;
+    z-index: 1;
+  }
+  #toc h2 {
+    border-top: none;
+    border-bottom: 1px solid #ddd;
+    font-size: 1em;
+    font-weight: normal;
+    margin: 0;
+    padding: 0.25em 1em 1em 0;
+  }
+  #toc nav {
+    display: block;
+    height: calc(90vh - 84px);
+    bottom: 0;
+    padding: 0.5em 0 0;
+    overflow: auto;
+  }
+  img { /* future proofing */
+    max-width: 100%;
+    height: auto;
+  }
+}
+
+/* pagination */
+@media print {
+  body {
+    width: 100%;
+  }
+  p {
+    orphans: 3;
+    widows: 3;
+  }
+  #n-copyright-notice {
+    border-bottom: none;
+  }
+  #toc, #n-introduction {
+    page-break-before: always;
+  }
+  #toc {
+    border-top: none;
+    padding-top: 0;
+  }
+  figure, pre {
+    page-break-inside: avoid;
+  }
+  figure {
+    overflow: scroll;
+  }
+  .breakable pre {
+    break-inside: auto;
+  }
+  h1, h2, h3, h4, h5, h6 {
+    page-break-after: avoid;
+  }
+  h2+*, h3+*, h4+*, h5+*, h6+* {
+    page-break-before: avoid;
+  }
+  pre {
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    font-size: 10pt;
+  }
+  table {
+    border: 1px solid #ddd;
+  }
+  td {
+    border-top: 1px solid #ddd;
+  }
+}
+
+/* This is commented out here, as the string-set: doesn't
+   pass W3C validation currently */
+/*
+.ears thead .left {
+  string-set: ears-top-left content();
+}
+
+.ears thead .center {
+  string-set: ears-top-center content();
+}
+
+.ears thead .right {
+  string-set: ears-top-right content();
+}
+
+.ears tfoot .left {
+  string-set: ears-bottom-left content();
+}
+
+.ears tfoot .center {
+  string-set: ears-bottom-center content();
+}
+
+.ears tfoot .right {
+  string-set: ears-bottom-right content();
+}
+*/
+
+@page :first {
+  padding-top: 0;
+  @top-left {
+    content: normal;
+    border: none;
+  }
+  @top-center {
+    content: normal;
+    border: none;
+  }
+  @top-right {
+    content: normal;
+    border: none;
+  }
+}
+
+@page {
+  size: A4;
+  margin-bottom: 45mm;
+  padding-top: 20px;
+  /* The following is commented out here, but set appropriately by in code, as
+     the content depends on the document */
+  /*
+  @top-left {
+    content: 'Internet-Draft';
+    vertical-align: bottom;
+    border-bottom: solid 1px #ccc;
+  }
+  @top-left {
+    content: string(ears-top-left);
+    vertical-align: bottom;
+    border-bottom: solid 1px #ccc;
+  }
+  @top-center {
+    content: string(ears-top-center);
+    vertical-align: bottom;
+    border-bottom: solid 1px #ccc;
+  }
+  @top-right {
+    content: string(ears-top-right);
+    vertical-align: bottom;
+    border-bottom: solid 1px #ccc;
+  }
+  @bottom-left {
+    content: string(ears-bottom-left);
+    vertical-align: top;
+    border-top: solid 1px #ccc;
+  }
+  @bottom-center {
+    content: string(ears-bottom-center);
+    vertical-align: top;
+    border-top: solid 1px #ccc;
+  }
+  @bottom-right {
+      content: '[Page ' counter(page) ']';
+      vertical-align: top;
+      border-top: solid 1px #ccc;
+  }
+  */
+
+}
+
+/* Changes introduced to fix issues found during implementation */
+/* Make sure links are clickable even if overlapped by following H* */
+a {
+  z-index: 2;
+}
+/* Separate body from document info even without intervening H1 */
+section {
+  clear: both;
+}
+
+
+/* Top align author divs, to avoid names without organization dropping level with org names */
+.author {
+  vertical-align: top;
+}
+
+/* Leave room in document info to show Internet-Draft on one line */
+#identifiers dt {
+  width: 8em;
+}
+
+/* Don't waste quite as much whitespace between label and value in doc info */
+#identifiers dd {
+  margin-left: 1em;
+}
+
+/* Give floating toc a background color (needed when it's a div inside section */
+#toc {
+  background-color: white;
+}
+
+/* Make the collapsed ToC header render white on gray also when it's a link */
+@media screen and (max-width: 1023px) {
+  #toc h2 a,
+  #toc h2 a:link,
+  #toc h2 a:focus,
+  #toc h2 a:hover,
+  #toc a.toplink,
+  #toc a.toplink:hover {
+    color: white;
+    background-color: #444;
+    text-decoration: none;
+  }
+}
+
+/* Give the bottom of the ToC some whitespace */
+@media screen and (min-width: 1024px) {
+  #toc {
+    padding: 0 0 1em 1em;
+  }
+}
+
+/* Style section numbers with more space between number and title */
+.section-number {
+  padding-right: 0.5em;
+}
+
+/* prevent monospace from becoming overly large */
+tt, code, pre {
+  font-size: 95%;
+}
+
+/* Fix the height/width aspect for ascii art*/
+.sourcecode pre,
+.art-text pre {
+  line-height: 1.12;
+}
+
+
+/* Add styling for a link in the ToC that points to the top of the document */
+a.toplink {
+  float: right;
+  margin-right: 0.5em;
+}
+
+/* Fix the dl styling to match the RFC 7992 attributes */
+dl > dt,
+dl.dlParallel > dt {
+  float: left;
+  margin-right: 1em;
+}
+dl.dlNewline > dt {
+  float: none;
+}
+
+/* Provide styling for table cell text alignment */
+table td.text-left,
+table th.text-left {
+  text-align: left;
+}
+table td.text-center,
+table th.text-center {
+  text-align: center;
+}
+table td.text-right,
+table th.text-right {
+  text-align: right;
+}
+
+/* Make the alternative author contact information look less like just another
+   author, and group it closer with the primary author contact information */
+.alternative-contact {
+  margin: 0.5em 0 0.25em 0;
+}
+address .non-ascii {
+  margin: 0 0 0 2em;
+}
+
+/* With it being possible to set tables with alignment
+  left, center, and right, { width: 100%; } does not make sense */
+table {
+  width: auto;
+}
+
+/* Avoid reference text that sits in a block with very wide left margin,
+   because of a long floating dt label.*/
+.references dd {
+  overflow: visible;
+}
+
+/* Control caption placement */
+caption {
+  caption-side: bottom;
+}
+
+/* Limit the width of the author address vcard, so names in right-to-left
+   script don't end up on the other side of the page. */
+
+address.vcard {
+  max-width: 30em;
+  margin-right: auto;
+}
+
+/* For address alignment dependent on LTR or RTL scripts */
+address div.left {
+  text-align: left;
+}
+address div.right {
+  text-align: right;
+}
+
+/* Provide table alignment support.  We can't use the alignX classes above
+   since they do unwanted things with caption and other styling. */
+table.right {
+ margin-left: auto;
+ margin-right: 0;
+}
+table.center {
+ margin-left: auto;
+ margin-right: auto;
+}
+table.left {
+ margin-left: 0;
+ margin-right: auto;
+}
+
+/* Give the table caption label the same styling as the figcaption */
+caption a[href] {
+  color: #222;
+}
+
+@media print {
+  .toplink {
+    display: none;
+  }
+
+  /* avoid overwriting the top border line with the ToC header */
+  #toc {
+    padding-top: 1px;
+  }
+
+  /* Avoid page breaks inside dl and author address entries */
+  .vcard {
+    page-break-inside: avoid;
+  }
+
+}
+/* Tweak the bcp14 keyword presentation */
+.bcp14 {
+  font-variant: small-caps;
+  font-weight: bold;
+  font-size: 0.9em;
+}
+/* Tweak the invisible space above H* in order not to overlay links in text above */
+ h2 {
+  margin-top: -18px;  /* provide offset for in-page anchors */
+  padding-top: 31px;
+ }
+ h3 {
+  margin-top: -18px;  /* provide offset for in-page anchors */
+  padding-top: 24px;
+ }
+ h4 {
+  margin-top: -18px;  /* provide offset for in-page anchors */
+  padding-top: 24px;
+ }
+/* Float artwork pilcrow to the right */
+@media screen {
+  .artwork a.pilcrow {
+    display: block;
+    line-height: 0.7;
+    margin-top: 0.15em;
+  }
+}
+/* Make pilcrows on dd visible */
+@media screen {
+  dd:hover > a.pilcrow {
+    visibility: visible;
+  }
+}
+/* Make the placement of figcaption match that of a table's caption
+   by removing the figure's added bottom margin */
+.alignLeft.art-text,
+.alignCenter.art-text,
+.alignRight.art-text {
+   margin-bottom: 0;
+}
+.alignLeft,
+.alignCenter,
+.alignRight {
+  margin: 1em 0 0 0;
+}
+/* In print, the pilcrow won't show on hover, so prevent it from taking up space,
+   possibly even requiring a new line */
+@media print {
+  a.pilcrow {
+    display: none;
+  }
+}
+/* Styling for the external metadata */
+div#external-metadata {
+  background-color: #eee;
+  padding: 0.5em;
+  margin-bottom: 0.5em;
+  display: none;
+}
+div#internal-metadata {
+  padding: 0.5em;                       /* to match the external-metadata padding */
+}
+/* Styling for title RFC Number */
+h1#rfcnum {
+  clear: both;
+  margin: 0 0 -1em;
+  padding: 1em 0 0 0;
+}
+/* Make .olPercent look the same as <ol><li> */
+dl.olPercent > dd {
+  margin-bottom: 0.25em;
+  min-height: initial;
+}
+/* Give aside some styling to set it apart */
+aside {
+  border-left: 1px solid #ddd;
+  margin: 1em 0 1em 2em;
+  padding: 0.2em 2em;
+}
+aside > dl,
+aside > ol,
+aside > ul,
+aside > table,
+aside > p {
+  margin-bottom: 0.5em;
+}
+/* Additional page break settings */
+@media print {
+  figcaption, table caption {
+    page-break-before: avoid;
+  }
+}
+/* Font size adjustments for print */
+@media print {
+  body  { font-size: 10pt;      line-height: normal; max-width: 96%; }
+  h1    { font-size: 1.72em;    padding-top: 1.5em; } /* 1*1.2*1.2*1.2 */
+  h2    { font-size: 1.44em;    padding-top: 1.5em; } /* 1*1.2*1.2 */
+  h3    { font-size: 1.2em;     padding-top: 1.5em; } /* 1*1.2 */
+  h4    { font-size: 1em;       padding-top: 1.5em; }
+  h5, h6 { font-size: 1em;      margin: initial; padding: 0.5em 0 0.3em; }
+}
+/* Sourcecode margin in print, when there's no pilcrow */
+@media print {
+  .artwork,
+  .artwork > pre,
+  .sourcecode {
+    margin-bottom: 1em;
+  }
+}
+/* Avoid narrow tables forcing too narrow table captions, which may render badly */
+table {
+  min-width: 20em;
+}
+/* ol type a */
+ol.type-a { list-style-type: lower-alpha; }
+ol.type-A { list-style-type: upper-alpha; }
+ol.type-i { list-style-type: lower-roman; }
+ol.type-I { list-style-type: lower-roman; }
+/* Apply the print table and row borders in general, on request from the RPC,
+and increase the contrast between border and odd row background slightly */
+table {
+  border: 1px solid #ddd;
+}
+td {
+  border-top: 1px solid #ddd;
+}
+tr {
+  break-inside: avoid;
+}
+tr:nth-child(2n+1) > td {
+  background-color: #f8f8f8;
+}
+/* Use style rules to govern display of the TOC. */
+@media screen and (max-width: 1023px) {
+  #toc nav { display: none; }
+  #toc.active nav { display: block; }
+}
+/* Add support for keepWithNext */
+.keepWithNext {
+  break-after: avoid-page;
+  break-after: avoid-page;
+}
+/* Add support for keepWithPrevious */
+.keepWithPrevious {
+  break-before: avoid-page;
+}
+/* Change the approach to avoiding breaks inside artwork etc. */
+figure, pre, table, .artwork, .sourcecode  {
+  break-before: auto;
+  break-after: auto;
+}
+/* Avoid breaks between <dt> and <dd> */
+dl {
+  break-before: auto;
+  break-inside: auto;
+}
+dt {
+  break-before: auto;
+  break-after: avoid-page;
+}
+dd {
+  break-before: avoid-page;
+  break-after: auto;
+  orphans: 3;
+  widows: 3
+}
+span.break, dd.break {
+  margin-bottom: 0;
+  min-height: 0;
+  break-before: auto;
+  break-inside: auto;
+  break-after: auto;
+}
+/* Undo break-before ToC */
+@media print {
+  #toc {
+    break-before: auto;
+  }
+}
+/* Text in compact lists should not get extra bottom margin space,
+   since that would makes the list not compact */
+ul.compact p, .ulCompact p,
+ol.compact p, .olCompact p {
+ margin: 0;
+}
+/* But the list as a whole needs the extra space at the end */
+section ul.compact,
+section .ulCompact,
+section ol.compact,
+section .olCompact {
+  margin-bottom: 1em;                    /* same as p not within ul.compact etc. */
+}
+/* The tt and code background above interferes with for instance table cell
+   backgrounds.  Changed to something a bit more selective. */
+tt, code {
+  background-color: transparent;
+}
+p tt, p code, li tt, li code {
+  background-color: #f8f8f8;
+}
+/* Tweak the pre margin -- 0px doesn't come out well */
+pre {
+   margin-top: 0.5px;
+}
+/* Tweak the compact list text */
+ul.compact, .ulCompact,
+ol.compact, .olCompact,
+dl.compact, .dlCompact {
+  line-height: normal;
+}
+/* Don't add top margin for nested lists */
+li > ul, li > ol, li > dl,
+dd > ul, dd > ol, dd > dl,
+dl > dd > dl {
+  margin-top: initial;
+}
+/* Elements that should not be rendered on the same line as a <dt> */
+/* This should match the element list in writer.text.TextWriter.render_dl() */
+dd > div.artwork:first-child,
+dd > aside:first-child,
+dd > figure:first-child,
+dd > ol:first-child,
+dd > div.sourcecode:first-child,
+dd > table:first-child,
+dd > ul:first-child {
+  clear: left;
+}
+/* fix for weird browser behaviour when <dd/> is empty */
+dt+dd:empty::before{
+  content: "\00a0";
+}
+/* Make paragraph spacing inside <li> smaller than in body text, to fit better within the list */
+li > p {
+  margin-bottom: 0.5em
+}
+/* Don't let p margin spill out from inside list items */
+li > p:last-of-type:only-child {
+  margin-bottom: 0;
+}
+</style>
+<link href="rfc-local.css" rel="stylesheet" type="text/css">
+<script type="application/javascript">async function addMetadata(){try{const e=document.styleSheets[0].cssRules;for(let t=0;t<e.length;t++)if(/#identifiers/.exec(e[t].selectorText)){const a=e[t].cssText.replace("#identifiers","#external-updates");document.styleSheets[0].insertRule(a,document.styleSheets[0].cssRules.length)}}catch(e){console.log(e)}const e=document.getElementById("external-metadata");if(e)try{var t,a="",o=function(e){const t=document.getElementsByTagName("meta");for(let a=0;a<t.length;a++)if(t[a].getAttribute("name")===e)return t[a].getAttribute("content");return""}("rfc.number");if(o){t="https://www.rfc-editor.org/rfc/rfc"+o+".json";try{const e=await fetch(t);a=await e.json()}catch(e){t=document.URL.indexOf("html")>=0?document.URL.replace(/html$/,"json"):document.URL+".json";const o=await fetch(t);a=await o.json()}}if(!a)return;e.style.display="block";const s="",d="https://datatracker.ietf.org/doc",n="https://datatracker.ietf.org/ipr/search",c="https://www.rfc-editor.org/info",l=a.doc_id.toLowerCase(),i=a.doc_id.slice(0,3).toLowerCase(),f=a.doc_id.slice(3).replace(/^0+/,""),u={status:"Status",obsoletes:"Obsoletes",obsoleted_by:"Obsoleted By",updates:"Updates",updated_by:"Updated By",see_also:"See Also",errata_url:"Errata"};let h="<dl style='overflow:hidden' id='external-updates'>";["status","obsoletes","obsoleted_by","updates","updated_by","see_also","errata_url"].forEach(e=>{if("status"==e){a[e]=a[e].toLowerCase();var t=a[e].split(" "),o=t.length,w="",p=1;for(let e=0;e<o;e++)p<o?w=w+r(t[e])+" ":w+=r(t[e]),p++;a[e]=w}else if("obsoletes"==e||"obsoleted_by"==e||"updates"==e||"updated_by"==e){var g,m="",b=1;g=a[e].length;for(let t=0;t<g;t++)a[e][t]&&(a[e][t]=String(a[e][t]).toLowerCase(),m=b<g?m+"<a href='"+s+"/rfc/".concat(a[e][t])+"'>"+a[e][t].slice(3)+"</a>, ":m+"<a href='"+s+"/rfc/".concat(a[e][t])+"'>"+a[e][t].slice(3)+"</a>",b++);a[e]=m}else if("see_also"==e){var y,L="",C=1;y=a[e].length;for(let t=0;t<y;t++)if(a[e][t]){a[e][t]=String(a[e][t]);var _=a[e][t].slice(0,3),v=a[e][t].slice(3).replace(/^0+/,"");L=C<y?"RFC"!=_?L+"<a href='"+s+"/info/"+_.toLowerCase().concat(v.toLowerCase())+"'>"+_+" "+v+"</a>, ":L+"<a href='"+s+"/info/"+_.toLowerCase().concat(v.toLowerCase())+"'>"+v+"</a>, ":"RFC"!=_?L+"<a href='"+s+"/info/"+_.toLowerCase().concat(v.toLowerCase())+"'>"+_+" "+v+"</a>":L+"<a href='"+s+"/info/"+_.toLowerCase().concat(v.toLowerCase())+"'>"+v+"</a>",C++}a[e]=L}else if("errata_url"==e){var R="";R=a[e]?R+"<a href='"+a[e]+"'>Errata exist</a> | <a href='"+d+"/"+l+"'>Datatracker</a>| <a href='"+n+"/?"+i+"="+f+"&submit="+i+"'>IPR</a> | <a href='"+c+"/"+l+"'>Info page</a>":"<a href='"+d+"/"+l+"'>Datatracker</a> | <a href='"+n+"/?"+i+"="+f+"&submit="+i+"'>IPR</a> | <a href='"+c+"/"+l+"'>Info page</a>",a[e]=R}""!=a[e]?"Errata"==u[e]?h+=`<dt>More info:</dt><dd>${a[e]}</dd>`:h+=`<dt>${u[e]}:</dt><dd>${a[e]}</dd>`:"Errata"==u[e]&&(h+=`<dt>More info:</dt><dd>${a[e]}</dd>`)}),h+="</dl>",e.innerHTML=h}catch(e){console.log(e)}else console.log("Could not locate metadata <div> element");function r(e){return e.charAt(0).toUpperCase()+e.slice(1)}}window.removeEventListener("load",addMetadata),window.addEventListener("load",addMetadata);</script>
+</head>
+<body class="xml2rfc">
+<script src="metadata.min.js"></script>
+<table class="ears">
+<thead><tr>
+<td class="left">Internet-Draft</td>
+<td class="center">RIFP</td>
+<td class="right">July 2026</td>
+</tr></thead>
+<tfoot><tr>
+<td class="left">Dulaunoy</td>
+<td class="center">Expires 30 January 2027</td>
+<td class="right">[Page]</td>
+</tr></tfoot>
+</table>
+<div id="external-metadata" class="document-information"></div>
+<div id="internal-metadata" class="document-information">
+<dl id="identifiers">
+<dt class="label-workgroup">Workgroup:</dt>
+<dd class="workgroup">Network Working Group</dd>
+<dt class="label-internet-draft">Internet-Draft:</dt>
+<dd class="internet-draft">draft-dulaunoy-rifp-01</dd>
+<dt class="label-published">Published:</dt>
+<dd class="published">
+<time datetime="2026-07-29" class="published">29 July 2026</time>
+    </dd>
+<dt class="label-intended-status">Intended Status:</dt>
+<dd class="intended-status">Experimental</dd>
+<dt class="label-expires">Expires:</dt>
+<dd class="expires"><time datetime="2027-01-30">30 January 2027</time></dd>
+<dt class="label-authors">Author:</dt>
+<dd class="authors">
+<div class="author">
+      <div class="author-name">A. Dulaunoy</div>
+<div class="org">Computer Incident Response Center Luxembourg</div>
+</div>
+</dd>
+</dl>
+</div>
+<h1 id="title">Radio Image Framing Protocol (RIFP)</h1>
+<section id="section-abstract">
+      <h2 id="abstract"><a href="#abstract" class="selfRef">Abstract</a></h2>
+<p id="section-abstract-1">This document specifies the Radio Image Framing Protocol (RIFP), a compact,
+unidirectional object-transfer protocol intended for transmitting images over
+low-rate radio links.  RIFP defines independently synchronized frames, a
+versioned and extensible binary header, fragmentation and reassembly rules, a
+fixed binary object descriptor, optional JSON metadata, per-frame CRC-32
+protection, whole-object SHA-256 verification,
+and registries for future frame types, flags, header extensions, media
+encodings, and radio profiles.<a href="#section-abstract-1" class="pilcrow">¶</a></p>
+<p id="section-abstract-2">RIFP is independent of a particular frequency allocation or modulation.  This
+document also defines an initial continuous-phase binary frequency-shift keying
+profile named <code>rifp-cpfsk-4800</code>.  The profile can be used on frequencies where
+local regulation permits such operation; 433.92 MHz is a common deployment
+example but is not mandated by this specification.<a href="#section-abstract-2" class="pilcrow">¶</a></p>
+</section>
+<div id="status-of-memo">
+<section id="section-boilerplate.1">
+        <h2 id="name-status-of-this-memo">
+<a href="#name-status-of-this-memo" class="section-name selfRef">Status of This Memo</a>
+        </h2>
+<p id="section-boilerplate.1-1">
+        This Internet-Draft is submitted in full conformance with the
+        provisions of BCP 78 and BCP 79.<a href="#section-boilerplate.1-1" class="pilcrow">¶</a></p>
+<p id="section-boilerplate.1-2">
+        Internet-Drafts are working documents of the Internet Engineering Task
+        Force (IETF). Note that other groups may also distribute working
+        documents as Internet-Drafts. The list of current Internet-Drafts is
+        at <span><a href="https://datatracker.ietf.org/drafts/current/">https://datatracker.ietf.org/drafts/current/</a></span>.<a href="#section-boilerplate.1-2" class="pilcrow">¶</a></p>
+<p id="section-boilerplate.1-3">
+        Internet-Drafts are draft documents valid for a maximum of six months
+        and may be updated, replaced, or obsoleted by other documents at any
+        time. It is inappropriate to use Internet-Drafts as reference
+        material or to cite them other than as "work in progress."<a href="#section-boilerplate.1-3" class="pilcrow">¶</a></p>
+<p id="section-boilerplate.1-4">
+        This Internet-Draft will expire on 30 January 2027.<a href="#section-boilerplate.1-4" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="copyright">
+<section id="section-boilerplate.2">
+        <h2 id="name-copyright-notice">
+<a href="#name-copyright-notice" class="section-name selfRef">Copyright Notice</a>
+        </h2>
+<p id="section-boilerplate.2-1">
+            Copyright (c) 2026 IETF Trust and the persons identified as the
+            document authors. All rights reserved.<a href="#section-boilerplate.2-1" class="pilcrow">¶</a></p>
+<p id="section-boilerplate.2-2">
+            This document is subject to BCP 78 and the IETF Trust's Legal
+            Provisions Relating to IETF Documents
+            (<span><a href="https://trustee.ietf.org/license-info">https://trustee.ietf.org/license-info</a></span>) in effect on the date of
+            publication of this document. Please review these documents
+            carefully, as they describe your rights and restrictions with
+            respect to this document.<a href="#section-boilerplate.2-2" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="toc">
+<section id="section-toc.1">
+        <a href="#" onclick="scroll(0,0)" class="toplink">▲</a><h2 id="name-table-of-contents">
+<a href="#name-table-of-contents" class="section-name selfRef">Table of Contents</a>
+        </h2>
+<nav class="toc"><ul class="compact toc ulBare ulEmpty">
+<li class="compact toc ulBare ulEmpty" id="section-toc.1-1.1">
+            <p id="section-toc.1-1.1.1" class="keepWithNext"><a href="#section-1" class="auto internal xref">1</a>.  <a href="#name-introduction" class="internal xref">Introduction</a></p>
+</li>
+          <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.2">
+            <p id="section-toc.1-1.2.1" class="keepWithNext"><a href="#section-2" class="auto internal xref">2</a>.  <a href="#name-conventions-and-terminology" class="internal xref">Conventions and Terminology</a></p>
+</li>
+          <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.3">
+            <p id="section-toc.1-1.3.1" class="keepWithNext"><a href="#section-3" class="auto internal xref">3</a>.  <a href="#name-protocol-overview" class="internal xref">Protocol Overview</a></p>
+</li>
+          <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.4">
+            <p id="section-toc.1-1.4.1"><a href="#section-4" class="auto internal xref">4</a>.  <a href="#name-rifp-frame-format" class="internal xref">RIFP Frame Format</a></p>
+<ul class="compact toc ulBare ulEmpty">
+<li class="compact toc ulBare ulEmpty" id="section-toc.1-1.4.2.1">
+                <p id="section-toc.1-1.4.2.1.1"><a href="#section-4.1" class="auto internal xref">4.1</a>.  <a href="#name-version-processing" class="internal xref">Version Processing</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.4.2.2">
+                <p id="section-toc.1-1.4.2.2.1"><a href="#section-4.2" class="auto internal xref">4.2</a>.  <a href="#name-flags" class="internal xref">Flags</a></p>
+</li>
+            </ul>
+</li>
+          <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.5">
+            <p id="section-toc.1-1.5.1"><a href="#section-5" class="auto internal xref">5</a>.  <a href="#name-header-extensions" class="internal xref">Header Extensions</a></p>
+</li>
+          <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.6">
+            <p id="section-toc.1-1.6.1"><a href="#section-6" class="auto internal xref">6</a>.  <a href="#name-frame-types" class="internal xref">Frame Types</a></p>
+<ul class="compact toc ulBare ulEmpty">
+<li class="compact toc ulBare ulEmpty" id="section-toc.1-1.6.2.1">
+                <p id="section-toc.1-1.6.2.1.1"><a href="#section-6.1" class="auto internal xref">6.1</a>.  <a href="#name-manifest-frame" class="internal xref">MANIFEST Frame</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.6.2.2">
+                <p id="section-toc.1-1.6.2.2.1"><a href="#section-6.2" class="auto internal xref">6.2</a>.  <a href="#name-data-frame" class="internal xref">DATA Frame</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.6.2.3">
+                <p id="section-toc.1-1.6.2.3.1"><a href="#section-6.3" class="auto internal xref">6.3</a>.  <a href="#name-end-frame" class="internal xref">END Frame</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.6.2.4">
+                <p id="section-toc.1-1.6.2.4.1"><a href="#section-6.4" class="auto internal xref">6.4</a>.  <a href="#name-cancel-frame" class="internal xref">CANCEL Frame</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.6.2.5">
+                <p id="section-toc.1-1.6.2.5.1"><a href="#section-6.5" class="auto internal xref">6.5</a>.  <a href="#name-object_descriptor-frame" class="internal xref">OBJECT_DESCRIPTOR Frame</a></p>
+<ul class="compact toc ulBare ulEmpty">
+<li class="compact toc ulBare ulEmpty" id="section-toc.1-1.6.2.5.2.1">
+                    <p id="section-toc.1-1.6.2.5.2.1.1"><a href="#section-6.5.1" class="auto internal xref">6.5.1</a>.  <a href="#name-encoding-id-registry" class="internal xref">Encoding ID Registry</a></p>
+</li>
+                  <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.6.2.5.2.2">
+                    <p id="section-toc.1-1.6.2.5.2.2.1"><a href="#section-6.5.2" class="auto internal xref">6.5.2</a>.  <a href="#name-pixel-format-registry" class="internal xref">Pixel Format Registry</a></p>
+</li>
+                </ul>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.6.2.6">
+                <p id="section-toc.1-1.6.2.6.1"><a href="#section-6.6" class="auto internal xref">6.6</a>.  <a href="#name-unknown-frame-types" class="internal xref">Unknown Frame Types</a></p>
+</li>
+            </ul>
+</li>
+          <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.7">
+            <p id="section-toc.1-1.7.1"><a href="#section-7" class="auto internal xref">7</a>.  <a href="#name-optional-extended-manifest-" class="internal xref">Optional Extended Manifest Format</a></p>
+<ul class="compact toc ulBare ulEmpty">
+<li class="compact toc ulBare ulEmpty" id="section-toc.1-1.7.2.1">
+                <p id="section-toc.1-1.7.2.1.1"><a href="#section-7.1" class="auto internal xref">7.1</a>.  <a href="#name-initial-media-and-encoding-" class="internal xref">Initial Media and Encoding Combinations</a></p>
+</li>
+            </ul>
+</li>
+          <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.8">
+            <p id="section-toc.1-1.8.1"><a href="#section-8" class="auto internal xref">8</a>.  <a href="#name-fragmentation-repetition-an" class="internal xref">Fragmentation, Repetition, and Reassembly</a></p>
+</li>
+          <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.9">
+            <p id="section-toc.1-1.9.1"><a href="#section-9" class="auto internal xref">9</a>.  <a href="#name-crc-32" class="internal xref">CRC-32</a></p>
+</li>
+          <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.10">
+            <p id="section-toc.1-1.10.1"><a href="#section-10" class="auto internal xref">10</a>. <a href="#name-initial-radio-profile-rifp-" class="internal xref">Initial Radio Profile: rifp-cpfsk-4800</a></p>
+</li>
+          <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.11">
+            <p id="section-toc.1-1.11.1"><a href="#section-11" class="auto internal xref">11</a>. <a href="#name-extensibility-model" class="internal xref">Extensibility Model</a></p>
+</li>
+          <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.12">
+            <p id="section-toc.1-1.12.1"><a href="#section-12" class="auto internal xref">12</a>. <a href="#name-security-considerations" class="internal xref">Security Considerations</a></p>
+</li>
+          <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.13">
+            <p id="section-toc.1-1.13.1"><a href="#section-13" class="auto internal xref">13</a>. <a href="#name-privacy-considerations" class="internal xref">Privacy Considerations</a></p>
+</li>
+          <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.14">
+            <p id="section-toc.1-1.14.1"><a href="#section-14" class="auto internal xref">14</a>. <a href="#name-iana-considerations" class="internal xref">IANA Considerations</a></p>
+<ul class="compact toc ulBare ulEmpty">
+<li class="compact toc ulBare ulEmpty" id="section-toc.1-1.14.2.1">
+                <p id="section-toc.1-1.14.2.1.1"><a href="#section-14.1" class="auto internal xref">14.1</a>.  <a href="#name-rifp-frame-types" class="internal xref">RIFP Frame Types</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.14.2.2">
+                <p id="section-toc.1-1.14.2.2.1"><a href="#section-14.2" class="auto internal xref">14.2</a>.  <a href="#name-rifp-header-tlv-base-types" class="internal xref">RIFP Header TLV Base Types</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.14.2.3">
+                <p id="section-toc.1-1.14.2.3.1"><a href="#section-14.3" class="auto internal xref">14.3</a>.  <a href="#name-rifp-flags" class="internal xref">RIFP Flags</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.14.2.4">
+                <p id="section-toc.1-1.14.2.4.1"><a href="#section-14.4" class="auto internal xref">14.4</a>.  <a href="#name-rifp-content-encodings" class="internal xref">RIFP Content Encodings</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.14.2.5">
+                <p id="section-toc.1-1.14.2.5.1"><a href="#section-14.5" class="auto internal xref">14.5</a>.  <a href="#name-rifp-object-encoding-ids" class="internal xref">RIFP Object Encoding IDs</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.14.2.6">
+                <p id="section-toc.1-1.14.2.6.1"><a href="#section-14.6" class="auto internal xref">14.6</a>.  <a href="#name-rifp-pixel-format-ids" class="internal xref">RIFP Pixel Format IDs</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.14.2.7">
+                <p id="section-toc.1-1.14.2.7.1"><a href="#section-14.7" class="auto internal xref">14.7</a>.  <a href="#name-image-rifp-raster-media-typ" class="internal xref">image/rifp-raster Media Type</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.14.2.8">
+                <p id="section-toc.1-1.14.2.8.1"><a href="#section-14.8" class="auto internal xref">14.8</a>.  <a href="#name-rifp-radio-profiles" class="internal xref">RIFP Radio Profiles</a></p>
+</li>
+            </ul>
+</li>
+          <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.15">
+            <p id="section-toc.1-1.15.1"><a href="#section-15" class="auto internal xref">15</a>. <a href="#name-implementation-status" class="internal xref">Implementation Status</a></p>
+</li>
+          <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.16">
+            <p id="section-toc.1-1.16.1"><a href="#section-16" class="auto internal xref">16</a>. <a href="#name-test-vector" class="internal xref">Test Vector</a></p>
+</li>
+          <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.17">
+            <p id="section-toc.1-1.17.1"><a href="#section-17" class="auto internal xref">17</a>. <a href="#name-references" class="internal xref">References</a></p>
+</li>
+          <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.18">
+            <p id="section-toc.1-1.18.1"><a href="#section-18" class="auto internal xref">18</a>. <a href="#name-references-2" class="internal xref">References</a></p>
+<ul class="compact toc ulBare ulEmpty">
+<li class="compact toc ulBare ulEmpty" id="section-toc.1-1.18.2.1">
+                <p id="section-toc.1-1.18.2.1.1"><a href="#section-18.1" class="auto internal xref">18.1</a>.  <a href="#name-normative-references" class="internal xref">Normative References</a></p>
+</li>
+              <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.18.2.2">
+                <p id="section-toc.1-1.18.2.2.1"><a href="#section-18.2" class="auto internal xref">18.2</a>.  <a href="#name-informative-references" class="internal xref">Informative References</a></p>
+</li>
+            </ul>
+</li>
+          <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.19">
+            <p id="section-toc.1-1.19.1"><a href="#appendix-A" class="auto internal xref">Appendix A</a>.  <a href="#name-acknowledgements" class="internal xref">Acknowledgements</a></p>
+</li>
+          <li class="compact toc ulBare ulEmpty" id="section-toc.1-1.20">
+            <p id="section-toc.1-1.20.1"><a href="#appendix-B" class="auto internal xref"></a><a href="#name-authors-address" class="internal xref">Author's Address</a></p>
+</li>
+        </ul>
+</nav>
+</section>
+</div>
+<div id="introduction">
+<section id="section-1">
+      <h2 id="name-introduction">
+<a href="#section-1" class="section-number selfRef">1. </a><a href="#name-introduction" class="section-name selfRef">Introduction</a>
+      </h2>
+<p id="section-1-1">Low-rate radio systems are often used to move small telemetry messages, but
+there are also practical cases for periodically sending weather maps, camera
+snapshots, diagrams, forms, or facsimile-like monochrome images.  Existing
+analogue facsimile systems generally bind image representation, timing, and
+modulation into one format.  That makes experimentation with compression,
+packet repetition, stronger integrity checks, or new physical layers harder.<a href="#section-1-1" class="pilcrow">¶</a></p>
+<p id="section-1-2">RIFP separates three concerns:<a href="#section-1-2" class="pilcrow">¶</a></p>
+<ul class="compact">
+<li class="compact" id="section-1-3.1">an image object and its metadata;<a href="#section-1-3.1" class="pilcrow">¶</a>
+</li>
+        <li class="compact" id="section-1-3.2">an extensible fragmentation and framing layer; and<a href="#section-1-3.2" class="pilcrow">¶</a>
+</li>
+        <li class="compact" id="section-1-3.3">a named radio profile describing modulation and synchronization.<a href="#section-1-3.3" class="pilcrow">¶</a>
+</li>
+      </ul>
+<p id="section-1-4">The initial protocol is intentionally unidirectional.  A sender can repeat
+manifest and data frames to improve reception on lossy channels.  Future
+specifications can add repair requests, forward-error correction,
+authentication, encryption, or bidirectional operation without redefining the
+base frame.<a href="#section-1-4" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="conventions-and-terminology">
+<section id="section-2">
+      <h2 id="name-conventions-and-terminology">
+<a href="#section-2" class="section-number selfRef">2. </a><a href="#name-conventions-and-terminology" class="section-name selfRef">Conventions and Terminology</a>
+      </h2>
+<p id="section-2-1">The key words <span class="bcp14">MUST</span>, <span class="bcp14">MUST NOT</span>, <span class="bcp14">REQUIRED</span>, <span class="bcp14">SHALL</span>, <span class="bcp14">SHALL NOT</span>,
+<span class="bcp14">SHOULD</span>, <span class="bcp14">SHOULD NOT</span>, <span class="bcp14">RECOMMENDED</span>, <span class="bcp14">NOT RECOMMENDED</span>, <span class="bcp14">MAY</span>, and
+<span class="bcp14">OPTIONAL</span> in this document are to be interpreted as described in BCP 14
+<span>[<a href="#RFC2119" class="cite xref">RFC2119</a>]</span> <span>[<a href="#RFC8174" class="cite xref">RFC8174</a>]</span> when, and only when, they appear in all capitals, as
+shown here.<a href="#section-2-1" class="pilcrow">¶</a></p>
+<p id="section-2-2">All multi-octet integers are unsigned and encoded in network byte order.
+Bits within an octet are transmitted most significant bit first.<a href="#section-2-2" class="pilcrow">¶</a></p>
+<span class="break"></span><dl class="dlCompact dlParallel" id="section-2-3">
+        <dt id="section-2-3.1">Object:</dt>
+        <dd style="margin-left: 1.5em" id="section-2-3.2">The complete encoded image byte sequence being transferred.<a href="#section-2-3.2" class="pilcrow">¶</a>
+</dd>
+        <dd class="break"></dd>
+<dt id="section-2-3.3">Session:</dt>
+        <dd style="margin-left: 1.5em" id="section-2-3.4">One transfer of one object, identified by a 64-bit Session ID.<a href="#section-2-3.4" class="pilcrow">¶</a>
+</dd>
+        <dd class="break"></dd>
+<dt id="section-2-3.5">Frame:</dt>
+        <dd style="margin-left: 1.5em" id="section-2-3.6">A complete RIFP protocol data unit consisting of a base header, optional
+header extensions, payload, and CRC-32 trailer.<a href="#section-2-3.6" class="pilcrow">¶</a>
+</dd>
+        <dd class="break"></dd>
+<dt id="section-2-3.7">Radio profile:</dt>
+        <dd style="margin-left: 1.5em" id="section-2-3.8">A named set of physical-layer and synchronization parameters used to carry
+RIFP frames.<a href="#section-2-3.8" class="pilcrow">¶</a>
+</dd>
+        <dd class="break"></dd>
+<dt id="section-2-3.9">Critical extension:</dt>
+        <dd style="margin-left: 1.5em" id="section-2-3.10">A flag or TLV that changes processing in a way that cannot safely be ignored.<a href="#section-2-3.10" class="pilcrow">¶</a>
+</dd>
+      <dd class="break"></dd>
+</dl>
+</section>
+</div>
+<div id="protocol-overview">
+<section id="section-3">
+      <h2 id="name-protocol-overview">
+<a href="#section-3" class="section-number selfRef">3. </a><a href="#name-protocol-overview" class="section-name selfRef">Protocol Overview</a>
+      </h2>
+<p id="section-3-1">A sender performs the following operations:<a href="#section-3-1" class="pilcrow">¶</a></p>
+<ol start="1" type="1" class="compact type-1" id="section-3-2">
+<li id="section-3-2.1">It scales and encodes an image.<a href="#section-3-2.1" class="pilcrow">¶</a>
+</li>
+        <li id="section-3-2.2">It assigns a 64-bit Session ID.<a href="#section-3-2.2" class="pilcrow">¶</a>
+</li>
+        <li id="section-3-2.3">It constructs a fixed binary OBJECT_DESCRIPTOR describing the object.<a href="#section-3-2.3" class="pilcrow">¶</a>
+</li>
+        <li id="section-3-2.4">It divides the encoded object into numbered chunks.<a href="#section-3-2.4" class="pilcrow">¶</a>
+</li>
+        <li id="section-3-2.5">It sends one or more OBJECT_DESCRIPTOR frames, DATA frames for each chunk,
+and an END frame.  It MAY additionally send a JSON MANIFEST.<a href="#section-3-2.5" class="pilcrow">¶</a>
+</li>
+        <li id="section-3-2.6">It MAY repeat any OBJECT_DESCRIPTOR, MANIFEST, or DATA frame.<a href="#section-3-2.6" class="pilcrow">¶</a>
+</li>
+      </ol>
+<p id="section-3-3">A receiver searches for the radio-profile synchronization word, parses the
+RIFP header, rejects unsupported critical features, validates the frame CRC,
+and stores valid chunks by Session ID and Sequence Number.  Once all chunks
+are present, the receiver concatenates them in sequence order and validates
+the complete size, CRC-32, and SHA-256 digest before decoding the image.<a href="#section-3-3" class="pilcrow">¶</a></p>
+<p id="section-3-4">Frames are self-synchronizing and independently protected.  A receiver does
+not need to receive a burst from its beginning, and it can process frames in
+any order.<a href="#section-3-4" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="rifp-frame-format">
+<section id="section-4">
+      <h2 id="name-rifp-frame-format">
+<a href="#section-4" class="section-number selfRef">4. </a><a href="#name-rifp-frame-format" class="section-name selfRef">RIFP Frame Format</a>
+      </h2>
+<p id="section-4-1">A RIFP frame begins immediately after any radio-profile preamble and
+synchronization word.  The minimum header is 28 octets.<a href="#section-4-1" class="pilcrow">¶</a></p>
+<div class="alignLeft art-text artwork" id="section-4-2">
+<pre>  0                   1                   2                   3
+  0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
+ +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+ | Major Version | Minor Version |  Frame Type   | Header Length |
+ +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+ |                            Flags                              |
+ +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+ |                                                               |
+ +                         Session ID                            +
+ |                                                               |
+ +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+ |                        Sequence Number                        |
+ +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+ |                          Total Count                          |
+ +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+ |        Payload Length         |           Reserved            |
+ +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+ |                 Header Extensions, if any ...                 |
+ +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+ |                         Payload ...                           |
+ +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+ |                            CRC-32                             |
+ +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+
+</pre><a href="#section-4-2" class="pilcrow">¶</a>
+</div>
+<span class="break"></span><dl class="dlCompact dlParallel" id="section-4-3">
+        <dt id="section-4-3.1">Major Version:</dt>
+        <dd style="margin-left: 1.5em" id="section-4-3.2">An 8-bit protocol major version.  This specification defines value 1.<a href="#section-4-3.2" class="pilcrow">¶</a>
+</dd>
+        <dd class="break"></dd>
+<dt id="section-4-3.3">Minor Version:</dt>
+        <dd style="margin-left: 1.5em" id="section-4-3.4">An 8-bit protocol minor version.  This specification defines value 0.<a href="#section-4-3.4" class="pilcrow">¶</a>
+</dd>
+        <dd class="break"></dd>
+<dt id="section-4-3.5">Frame Type:</dt>
+        <dd style="margin-left: 1.5em" id="section-4-3.6">An 8-bit value identifying the payload semantics.<a href="#section-4-3.6" class="pilcrow">¶</a>
+</dd>
+        <dd class="break"></dd>
+<dt id="section-4-3.7">Header Length:</dt>
+        <dd style="margin-left: 1.5em" id="section-4-3.8">Total header length in octets, including the 28-octet base header and all
+TLVs.  It <span class="bcp14">MUST</span> be between 28 and 255 inclusive.<a href="#section-4-3.8" class="pilcrow">¶</a>
+</dd>
+        <dd class="break"></dd>
+<dt id="section-4-3.9">Flags:</dt>
+        <dd style="margin-left: 1.5em" id="section-4-3.10">A 32-bit field.  Bits 0 through 15 are advisory.  Bits 16 through 31 are
+critical.<a href="#section-4-3.10" class="pilcrow">¶</a>
+</dd>
+        <dd class="break"></dd>
+<dt id="section-4-3.11">Session ID:</dt>
+        <dd style="margin-left: 1.5em" id="section-4-3.12">A 64-bit identifier shared by all frames in one transfer.  Senders <span class="bcp14">SHOULD</span>
+generate this value using a cryptographically secure random-number generator.<a href="#section-4-3.12" class="pilcrow">¶</a>
+</dd>
+        <dd class="break"></dd>
+<dt id="section-4-3.13">Sequence Number:</dt>
+        <dd style="margin-left: 1.5em" id="section-4-3.14">Frame-type-specific sequence information.<a href="#section-4-3.14" class="pilcrow">¶</a>
+</dd>
+        <dd class="break"></dd>
+<dt id="section-4-3.15">Total Count:</dt>
+        <dd style="margin-left: 1.5em" id="section-4-3.16">The number of DATA chunks in the session.<a href="#section-4-3.16" class="pilcrow">¶</a>
+</dd>
+        <dd class="break"></dd>
+<dt id="section-4-3.17">Payload Length:</dt>
+        <dd style="margin-left: 1.5em" id="section-4-3.18">Payload size in octets.  The maximum is 65535.<a href="#section-4-3.18" class="pilcrow">¶</a>
+</dd>
+        <dd class="break"></dd>
+<dt id="section-4-3.19">Reserved:</dt>
+        <dd style="margin-left: 1.5em" id="section-4-3.20">This field <span class="bcp14">MUST</span> be transmitted as zero.  A receiver <span class="bcp14">MUST</span> discard a
+frame in which it is non-zero.<a href="#section-4-3.20" class="pilcrow">¶</a>
+</dd>
+        <dd class="break"></dd>
+<dt id="section-4-3.21">Header Extensions:</dt>
+        <dd style="margin-left: 1.5em" id="section-4-3.22">Zero or more TLVs, as specified in <a href="#header-extensions" class="auto internal xref">Section 5</a>.<a href="#section-4-3.22" class="pilcrow">¶</a>
+</dd>
+        <dd class="break"></dd>
+<dt id="section-4-3.23">CRC-32:</dt>
+        <dd style="margin-left: 1.5em" id="section-4-3.24">CRC-32/ISO-HDLC over the complete header, including extensions, followed by
+the payload.  The radio preamble and synchronization word are not included.<a href="#section-4-3.24" class="pilcrow">¶</a>
+</dd>
+      <dd class="break"></dd>
+</dl>
+<div id="version-processing">
+<section id="section-4.1">
+        <h3 id="name-version-processing">
+<a href="#section-4.1" class="section-number selfRef">4.1. </a><a href="#name-version-processing" class="section-name selfRef">Version Processing</a>
+        </h3>
+<p id="section-4.1-1">A receiver that does not support the received Major Version <span class="bcp14">MUST</span> discard
+the frame.  A receiver <span class="bcp14">MAY</span> process a higher Minor Version when it
+understands the Frame Type and all critical flags and critical TLVs.  Unknown
+non-critical features <span class="bcp14">MUST NOT</span> by themselves cause rejection.<a href="#section-4.1-1" class="pilcrow">¶</a></p>
+<p id="section-4.1-2">A future specification that changes base-field interpretation or processing in
+an incompatible manner <span class="bcp14">MUST</span> allocate a new Major Version.<a href="#section-4.1-2" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="flags">
+<section id="section-4.2">
+        <h3 id="name-flags">
+<a href="#section-4.2" class="section-number selfRef">4.2. </a><a href="#name-flags" class="section-name selfRef">Flags</a>
+        </h3>
+<p id="section-4.2-1">The following flag is defined:<a href="#section-4.2-1" class="pilcrow">¶</a></p>
+<table class="center" id="table-1">
+          <caption><a href="#table-1" class="selfRef">Table 1</a></caption>
+<thead>
+            <tr>
+              <th class="text-left" rowspan="1" colspan="1">Bit</th>
+              <th class="text-left" rowspan="1" colspan="1">Name</th>
+              <th class="text-left" rowspan="1" colspan="1">Semantics</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="text-left" rowspan="1" colspan="1">0</td>
+              <td class="text-left" rowspan="1" colspan="1">RETRANSMISSION</td>
+              <td class="text-left" rowspan="1" colspan="1">The frame repeats information sent previously.</td>
+            </tr>
+          </tbody>
+        </table>
+<p id="section-4.2-3">Bits 1 through 15 are unassigned advisory flags.  Receivers <span class="bcp14">MUST</span> ignore
+unknown advisory flags.<a href="#section-4.2-3" class="pilcrow">¶</a></p>
+<p id="section-4.2-4">Bits 16 through 31 are critical flags.  A receiver <span class="bcp14">MUST</span> discard a frame
+containing any critical flag it does not understand.<a href="#section-4.2-4" class="pilcrow">¶</a></p>
+</section>
+</div>
+</section>
+</div>
+<div id="header-extensions">
+<section id="section-5">
+      <h2 id="name-header-extensions">
+<a href="#section-5" class="section-number selfRef">5. </a><a href="#name-header-extensions" class="section-name selfRef">Header Extensions</a>
+      </h2>
+<p id="section-5-1">Header extensions use the following TLV format:<a href="#section-5-1" class="pilcrow">¶</a></p>
+<div class="alignLeft art-text artwork" id="section-5-2">
+<pre>  0                   1                   2                   3
+  0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
+ +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+ |            TLV Type           |          TLV Length           |
+ +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+ |                         TLV Value ...                         |
+ +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+
+</pre><a href="#section-5-2" class="pilcrow">¶</a>
+</div>
+<span class="break"></span><dl class="dlCompact dlParallel" id="section-5-3">
+        <dt id="section-5-3.1">TLV Type:</dt>
+        <dd style="margin-left: 1.5em" id="section-5-3.2">A 16-bit type.  Bit 15 is the Critical bit.  Bits 0 through 14 identify the
+extension type.<a href="#section-5-3.2" class="pilcrow">¶</a>
+</dd>
+        <dd class="break"></dd>
+<dt id="section-5-3.3">TLV Length:</dt>
+        <dd style="margin-left: 1.5em" id="section-5-3.4">Length of the value in octets, excluding the four-octet TLV header.<a href="#section-5-3.4" class="pilcrow">¶</a>
+</dd>
+        <dd class="break"></dd>
+<dt id="section-5-3.5">TLV Value:</dt>
+        <dd style="margin-left: 1.5em" id="section-5-3.6">Type-specific bytes.  TLVs are concatenated without alignment padding.<a href="#section-5-3.6" class="pilcrow">¶</a>
+</dd>
+      <dd class="break"></dd>
+</dl>
+<p id="section-5-4">An unknown TLV with the Critical bit set <span class="bcp14">MUST</span> cause the frame to be
+discarded.  An unknown TLV without the Critical bit set <span class="bcp14">MUST</span> be ignored.
+A sender <span class="bcp14">MUST NOT</span> include two critical TLVs with the same base type unless
+the specification for that TLV explicitly permits repetition.<a href="#section-5-4" class="pilcrow">¶</a></p>
+<p id="section-5-5">This document defines these non-critical TLVs:<a href="#section-5-5" class="pilcrow">¶</a></p>
+<table class="center" id="table-2">
+        <caption><a href="#table-2" class="selfRef">Table 2</a></caption>
+<thead>
+          <tr>
+            <th class="text-left" rowspan="1" colspan="1">Base Type</th>
+            <th class="text-left" rowspan="1" colspan="1">Name</th>
+            <th class="text-left" rowspan="1" colspan="1">Value</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="text-left" rowspan="1" colspan="1">1</td>
+            <td class="text-left" rowspan="1" colspan="1">Sender ID</td>
+            <td class="text-left" rowspan="1" colspan="1">A valid UTF-8 sender identifier.</td>
+          </tr>
+          <tr>
+            <td class="text-left" rowspan="1" colspan="1">2</td>
+            <td class="text-left" rowspan="1" colspan="1">Radio Profile</td>
+            <td class="text-left" rowspan="1" colspan="1">A valid UTF-8 radio-profile name.</td>
+          </tr>
+          <tr>
+            <td class="text-left" rowspan="1" colspan="1">3</td>
+            <td class="text-left" rowspan="1" colspan="1">Content Hint</td>
+            <td class="text-left" rowspan="1" colspan="1">A valid UTF-8 short description for operator display.</td>
+          </tr>
+        </tbody>
+      </table>
+<p id="section-5-7">Text TLV values <span class="bcp14">MUST</span> be valid UTF-8 and <span class="bcp14">MUST NOT</span> contain a NUL octet.
+Receivers <span class="bcp14">SHOULD</span> impose a local display-length limit.<a href="#section-5-7" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="frame-types">
+<section id="section-6">
+      <h2 id="name-frame-types">
+<a href="#section-6" class="section-number selfRef">6. </a><a href="#name-frame-types" class="section-name selfRef">Frame Types</a>
+      </h2>
+<div id="manifest-frame">
+<section id="section-6.1">
+        <h3 id="name-manifest-frame">
+<a href="#section-6.1" class="section-number selfRef">6.1. </a><a href="#name-manifest-frame" class="section-name selfRef">MANIFEST Frame</a>
+        </h3>
+<p id="section-6.1-1">Frame Type 1 is MANIFEST.  Its payload is a UTF-8 JSON object conforming to
+<span>[<a href="#RFC8259" class="cite xref">RFC8259</a>]</span>.  Sequence Number <span class="bcp14">MUST</span> be zero.  Total Count <span class="bcp14">MUST</span> equal the
+number of DATA chunks.<a href="#section-6.1-1" class="pilcrow">¶</a></p>
+<p id="section-6.1-2">A sender <span class="bcp14">SHOULD</span> transmit the MANIFEST more than once and <span class="bcp14">SHOULD</span> repeat
+it periodically during a long session.  A receiver <span class="bcp14">MUST</span> treat identical
+MANIFEST frames as duplicates.  If two valid manifests for the same session
+conflict, the receiver <span class="bcp14">MUST NOT</span> combine their DATA chunks unless a future
+extension defines conflict resolution.<a href="#section-6.1-2" class="pilcrow">¶</a></p>
+<p id="section-6.1-3">MANIFEST is optional extended, human-oriented metadata.  It is not required
+to receive or decode an object when an OBJECT_DESCRIPTOR is present.<a href="#section-6.1-3" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="data-frame">
+<section id="section-6.2">
+        <h3 id="name-data-frame">
+<a href="#section-6.2" class="section-number selfRef">6.2. </a><a href="#name-data-frame" class="section-name selfRef">DATA Frame</a>
+        </h3>
+<p id="section-6.2-1">Frame Type 2 is DATA.  The payload contains one contiguous chunk of the
+encoded object.  Sequence Number is zero-based.  Total Count is the number of
+chunks in the session and <span class="bcp14">MUST</span> match the OBJECT_DESCRIPTOR.<a href="#section-6.2-1" class="pilcrow">¶</a></p>
+<p id="section-6.2-2">All DATA frames except the final one <span class="bcp14">SHOULD</span> have the descriptor's DATA
+Chunk Size.  The final DATA frame <span class="bcp14">MAY</span> be shorter.  A receiver <span class="bcp14">MUST</span>
+ignore a DATA frame whose Sequence Number is greater than or equal to Total
+Count.<a href="#section-6.2-2" class="pilcrow">¶</a></p>
+<p id="section-6.2-3">A repeated DATA frame <span class="bcp14">MUST</span> contain exactly the same payload as the earlier
+frame with the same Session ID and Sequence Number.  A receiver that observes
+conflicting valid payloads for one sequence <span class="bcp14">MUST</span> abandon or quarantine the
+session.<a href="#section-6.2-3" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="end-frame">
+<section id="section-6.3">
+        <h3 id="name-end-frame">
+<a href="#section-6.3" class="section-number selfRef">6.3. </a><a href="#name-end-frame" class="section-name selfRef">END Frame</a>
+        </h3>
+<p id="section-6.3-1">Frame Type 3 is END.  Sequence Number and Total Count <span class="bcp14">MUST</span> both equal the
+number of DATA chunks.  Its payload is exactly 44 octets:<a href="#section-6.3-1" class="pilcrow">¶</a></p>
+<div class="alignLeft art-text artwork" id="section-6.3-2">
+<pre> +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+ |                                                               |
+ +                    Encoded Size (64 bits)                     +
+ |                                                               |
+ +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+ |                    Payload CRC-32 (32 bits)                    |
+ +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+ |                                                               |
+ +                                                               +
+ |                    Payload SHA-256 (256 bits)                  |
+ +                                                               +
+ |                                                               |
+ +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+
+</pre><a href="#section-6.3-2" class="pilcrow">¶</a>
+</div>
+<p id="section-6.3-3">The END frame is a completion hint and repeats integrity values from the
+OBJECT_DESCRIPTOR.  Receipt of END is not required for completion when the
+descriptor and all DATA chunks have already been received and verified.<a href="#section-6.3-3" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="cancel-frame">
+<section id="section-6.4">
+        <h3 id="name-cancel-frame">
+<a href="#section-6.4" class="section-number selfRef">6.4. </a><a href="#name-cancel-frame" class="section-name selfRef">CANCEL Frame</a>
+        </h3>
+<p id="section-6.4-1">Frame Type 4 is CANCEL.  It indicates that the sender has abandoned the
+session.  Sequence Number and Total Count <span class="bcp14">SHOULD</span> be zero.  The payload
+<span class="bcp14">MAY</span> be empty or contain a short UTF-8 reason.  A receiver <span class="bcp14">SHOULD</span> discard
+incomplete state for the indicated Session ID.<a href="#section-6.4-1" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="object-descriptor-frame">
+<section id="section-6.5">
+        <h3 id="name-object_descriptor-frame">
+<a href="#section-6.5" class="section-number selfRef">6.5. </a><a href="#name-object_descriptor-frame" class="section-name selfRef">OBJECT_DESCRIPTOR Frame</a>
+        </h3>
+<p id="section-6.5-1">Frame Type 5 is OBJECT_DESCRIPTOR.  It is the mandatory baseline manifest for
+RIFP 1.0.  Its fixed 56-octet payload is machine-oriented and contains all
+information needed to allocate, reassemble, validate, and decode an image:<a href="#section-6.5-1" class="pilcrow">¶</a></p>
+<div class="alignLeft art-text artwork" id="section-6.5-2">
+<pre>  0                   1                   2                   3
+  0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
+ +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+ | Desc. Version |  Encoding ID  | Pixel Format  |    Reserved   |
+ +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+ |         Width                 |          Height               |
+ +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+ |       DATA Chunk Size         |          Reserved             |
+ +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+ |                                                               |
+ +                    Encoded Size (64 bits)                     +
+ |                                                               |
+ +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+ |                    Payload CRC-32 (32 bits)                    |
+ +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+ |                                                               |
+ +                                                               +
+ |                                                               |
+ +                    Payload SHA-256 (256 bits)                  +
+ |                                                               |
+ +                                                               +
+ |                                                               |
+ +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+
+</pre><a href="#section-6.5-2" class="pilcrow">¶</a>
+</div>
+<p id="section-6.5-3">Descriptor Version is 1.  Both Reserved fields <span class="bcp14">MUST</span> be zero.  Width and
+Height are unsigned 16-bit pixel dimensions and <span class="bcp14">MUST</span> be non-zero.  DATA
+Chunk Size is the non-zero nominal DATA payload length.  Encoded Size is the
+complete encoded object's length.  Payload CRC-32 and Payload SHA-256 cover
+the complete encoded object.  Sequence Number <span class="bcp14">MUST</span> be zero, Total Count
+<span class="bcp14">MUST</span> equal the number of DATA frames, and Payload Length <span class="bcp14">MUST</span> be 56.
+An unknown Descriptor Version <span class="bcp14">MUST</span> be rejected.<a href="#section-6.5-3" class="pilcrow">¶</a></p>
+<p id="section-6.5-4">The complete PDU without radio preamble or synchronization is 88 octets: a
+28-octet base header, the 56-octet descriptor, and a 4-octet frame CRC.
+Descriptor Version 1 remains fixed at 56 octets.  Future mandatory features
+require a new descriptor version, a critical header TLV or flag, or another
+descriptor frame type; unknown non-critical TLVs remain ignorable.<a href="#section-6.5-4" class="pilcrow">¶</a></p>
+<p id="section-6.5-5">When both OBJECT_DESCRIPTOR and MANIFEST are received, their dimensions,
+encoding, pixel format, encoded size, CRC-32, SHA-256, chunk size, and chunk
+count <span class="bcp14">MUST</span> match.  A receiver <span class="bcp14">MUST</span> reject the session on conflict.<a href="#section-6.5-5" class="pilcrow">¶</a></p>
+<div id="encoding-id-registry">
+<section id="section-6.5.1">
+          <h4 id="name-encoding-id-registry">
+<a href="#section-6.5.1" class="section-number selfRef">6.5.1. </a><a href="#name-encoding-id-registry" class="section-name selfRef">Encoding ID Registry</a>
+          </h4>
+<p id="section-6.5.1-1"><code>auto</code> is sender-side selection behavior and <span class="bcp14">MUST NOT</span> appear on the wire.<a href="#section-6.5.1-1" class="pilcrow">¶</a></p>
+<table class="center" id="table-3">
+            <caption><a href="#table-3" class="selfRef">Table 3</a></caption>
+<thead>
+              <tr>
+                <th class="text-left" rowspan="1" colspan="1">ID</th>
+                <th class="text-left" rowspan="1" colspan="1">Encoding</th>
+                <th class="text-left" rowspan="1" colspan="1">Media Type</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="text-left" rowspan="1" colspan="1">0x01</td>
+                <td class="text-left" rowspan="1" colspan="1">CCITT Group 3 TIFF</td>
+                <td class="text-left" rowspan="1" colspan="1">
+                  <code>image/tiff</code>
+</td>
+              </tr>
+              <tr>
+                <td class="text-left" rowspan="1" colspan="1">0x02</td>
+                <td class="text-left" rowspan="1" colspan="1">CCITT Group 4 TIFF</td>
+                <td class="text-left" rowspan="1" colspan="1">
+                  <code>image/tiff</code>
+</td>
+              </tr>
+              <tr>
+                <td class="text-left" rowspan="1" colspan="1">0x03</td>
+                <td class="text-left" rowspan="1" colspan="1">PNG</td>
+                <td class="text-left" rowspan="1" colspan="1">
+                  <code>image/png</code>
+</td>
+              </tr>
+              <tr>
+                <td class="text-left" rowspan="1" colspan="1">0x04</td>
+                <td class="text-left" rowspan="1" colspan="1">JPEG</td>
+                <td class="text-left" rowspan="1" colspan="1">
+                  <code>image/jpeg</code>
+</td>
+              </tr>
+              <tr>
+                <td class="text-left" rowspan="1" colspan="1">0x05</td>
+                <td class="text-left" rowspan="1" colspan="1">Packed raw raster</td>
+                <td class="text-left" rowspan="1" colspan="1">
+                  <code>image/rifp-raster</code>
+</td>
+              </tr>
+              <tr>
+                <td class="text-left" rowspan="1" colspan="1">0x06</td>
+                <td class="text-left" rowspan="1" colspan="1">RLE raster</td>
+                <td class="text-left" rowspan="1" colspan="1">
+                  <code>image/rifp-raster</code>
+</td>
+              </tr>
+              <tr>
+                <td class="text-left" rowspan="1" colspan="1">0x07</td>
+                <td class="text-left" rowspan="1" colspan="1">ZLIB raster</td>
+                <td class="text-left" rowspan="1" colspan="1">
+                  <code>image/rifp-raster</code>
+</td>
+              </tr>
+              <tr>
+                <td class="text-left" rowspan="1" colspan="1">0x80--0xFF</td>
+                <td class="text-left" rowspan="1" colspan="1">Private use</td>
+                <td class="text-left" rowspan="1" colspan="1">Profile-specific</td>
+              </tr>
+            </tbody>
+          </table>
+</section>
+</div>
+<div id="pixel-format-registry">
+<section id="section-6.5.2">
+          <h4 id="name-pixel-format-registry">
+<a href="#section-6.5.2" class="section-number selfRef">6.5.2. </a><a href="#name-pixel-format-registry" class="section-name selfRef">Pixel Format Registry</a>
+          </h4>
+<table class="center" id="table-4">
+            <caption><a href="#table-4" class="selfRef">Table 4</a></caption>
+<thead>
+              <tr>
+                <th class="text-left" rowspan="1" colspan="1">ID</th>
+                <th class="text-left" rowspan="1" colspan="1">Pixel Format</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td class="text-left" rowspan="1" colspan="1">0x01</td>
+                <td class="text-left" rowspan="1" colspan="1">1-bit grayscale</td>
+              </tr>
+              <tr>
+                <td class="text-left" rowspan="1" colspan="1">0x02</td>
+                <td class="text-left" rowspan="1" colspan="1">2-bit grayscale</td>
+              </tr>
+              <tr>
+                <td class="text-left" rowspan="1" colspan="1">0x03</td>
+                <td class="text-left" rowspan="1" colspan="1">4-bit grayscale</td>
+              </tr>
+              <tr>
+                <td class="text-left" rowspan="1" colspan="1">0x04</td>
+                <td class="text-left" rowspan="1" colspan="1">8-bit grayscale</td>
+              </tr>
+              <tr>
+                <td class="text-left" rowspan="1" colspan="1">0x05</td>
+                <td class="text-left" rowspan="1" colspan="1">RGB888</td>
+              </tr>
+              <tr>
+                <td class="text-left" rowspan="1" colspan="1">0x06</td>
+                <td class="text-left" rowspan="1" colspan="1">RGBA8888</td>
+              </tr>
+              <tr>
+                <td class="text-left" rowspan="1" colspan="1">0x80--0xFF</td>
+                <td class="text-left" rowspan="1" colspan="1">Private use</td>
+              </tr>
+            </tbody>
+          </table>
+<p id="section-6.5.2-2">For TIFF, PNG, and JPEG, receivers <span class="bcp14">MUST</span> verify that decoded dimensions and
+pixel representation agree with the descriptor.<a href="#section-6.5.2-2" class="pilcrow">¶</a></p>
+</section>
+</div>
+</section>
+</div>
+<div id="unknown-frame-types">
+<section id="section-6.6">
+        <h3 id="name-unknown-frame-types">
+<a href="#section-6.6" class="section-number selfRef">6.6. </a><a href="#name-unknown-frame-types" class="section-name selfRef">Unknown Frame Types</a>
+        </h3>
+<p id="section-6.6-1">A receiver <span class="bcp14">MUST</span> validate the complete header and CRC before deciding that a
+Frame Type is unknown.  It <span class="bcp14">MUST</span> then ignore the frame.  Unknown frame types
+do not invalidate other frames in the same session.<a href="#section-6.6-1" class="pilcrow">¶</a></p>
+</section>
+</div>
+</section>
+</div>
+<div id="optional-extended-manifest-format">
+<section id="section-7">
+      <h2 id="name-optional-extended-manifest-">
+<a href="#section-7" class="section-number selfRef">7. </a><a href="#name-optional-extended-manifest-" class="section-name selfRef">Optional Extended Manifest Format</a>
+      </h2>
+<p id="section-7-1">The manifest is a JSON object encoded as UTF-8 without a byte-order mark.
+Field names and string values are case sensitive.  For interoperable JSON
+processing, integer values <span class="bcp14">MUST</span> be in the range -(2^53) + 1 through
+(2^53) - 1.  Unknown fields <span class="bcp14">MUST</span> be ignored unless a future specification
+explicitly marks them as critical through a critical header extension or
+critical flag.<a href="#section-7-1" class="pilcrow">¶</a></p>
+<p id="section-7-2">The following fields are required:<a href="#section-7-2" class="pilcrow">¶</a></p>
+<table class="center" id="table-5">
+        <caption><a href="#table-5" class="selfRef">Table 5</a></caption>
+<thead>
+          <tr>
+            <th class="text-left" rowspan="1" colspan="1">Field</th>
+            <th class="text-left" rowspan="1" colspan="1">Type</th>
+            <th class="text-left" rowspan="1" colspan="1">Description</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="text-left" rowspan="1" colspan="1">
+              <code>protocol</code>
+</td>
+            <td class="text-left" rowspan="1" colspan="1">string</td>
+            <td class="text-left" rowspan="1" colspan="1">Exactly <code>rifp</code>.</td>
+          </tr>
+          <tr>
+            <td class="text-left" rowspan="1" colspan="1">
+              <code>protocol_version</code>
+</td>
+            <td class="text-left" rowspan="1" colspan="1">string</td>
+            <td class="text-left" rowspan="1" colspan="1">Dotted major and minor version, initially <code>1.0</code>.</td>
+          </tr>
+          <tr>
+            <td class="text-left" rowspan="1" colspan="1">
+              <code>session_id</code>
+</td>
+            <td class="text-left" rowspan="1" colspan="1">string</td>
+            <td class="text-left" rowspan="1" colspan="1">Session ID as exactly 16 lowercase hexadecimal digits.</td>
+          </tr>
+          <tr>
+            <td class="text-left" rowspan="1" colspan="1">
+              <code>filename</code>
+</td>
+            <td class="text-left" rowspan="1" colspan="1">string</td>
+            <td class="text-left" rowspan="1" colspan="1">Suggested source filename.</td>
+          </tr>
+          <tr>
+            <td class="text-left" rowspan="1" colspan="1">
+              <code>media_type</code>
+</td>
+            <td class="text-left" rowspan="1" colspan="1">string</td>
+            <td class="text-left" rowspan="1" colspan="1">Media type of the encoded object.</td>
+          </tr>
+          <tr>
+            <td class="text-left" rowspan="1" colspan="1">
+              <code>content_encoding</code>
+</td>
+            <td class="text-left" rowspan="1" colspan="1">string</td>
+            <td class="text-left" rowspan="1" colspan="1">Registered RIFP encoding name.</td>
+          </tr>
+          <tr>
+            <td class="text-left" rowspan="1" colspan="1">
+              <code>width</code>
+</td>
+            <td class="text-left" rowspan="1" colspan="1">integer</td>
+            <td class="text-left" rowspan="1" colspan="1">Decoded image width in pixels.</td>
+          </tr>
+          <tr>
+            <td class="text-left" rowspan="1" colspan="1">
+              <code>height</code>
+</td>
+            <td class="text-left" rowspan="1" colspan="1">integer</td>
+            <td class="text-left" rowspan="1" colspan="1">Decoded image height in pixels.</td>
+          </tr>
+          <tr>
+            <td class="text-left" rowspan="1" colspan="1">
+              <code>bits_per_pixel</code>
+</td>
+            <td class="text-left" rowspan="1" colspan="1">integer</td>
+            <td class="text-left" rowspan="1" colspan="1">Nominal decoded grayscale depth.</td>
+          </tr>
+          <tr>
+            <td class="text-left" rowspan="1" colspan="1">
+              <code>encoded_size</code>
+</td>
+            <td class="text-left" rowspan="1" colspan="1">integer</td>
+            <td class="text-left" rowspan="1" colspan="1">Complete encoded object size in octets.</td>
+          </tr>
+          <tr>
+            <td class="text-left" rowspan="1" colspan="1">
+              <code>payload_crc32</code>
+</td>
+            <td class="text-left" rowspan="1" colspan="1">integer</td>
+            <td class="text-left" rowspan="1" colspan="1">Unsigned CRC-32 of the complete object.</td>
+          </tr>
+          <tr>
+            <td class="text-left" rowspan="1" colspan="1">
+              <code>payload_sha256</code>
+</td>
+            <td class="text-left" rowspan="1" colspan="1">string</td>
+            <td class="text-left" rowspan="1" colspan="1">Lowercase hexadecimal SHA-256 digest.</td>
+          </tr>
+          <tr>
+            <td class="text-left" rowspan="1" colspan="1">
+              <code>chunk_size</code>
+</td>
+            <td class="text-left" rowspan="1" colspan="1">integer</td>
+            <td class="text-left" rowspan="1" colspan="1">Nominal DATA payload size in octets.</td>
+          </tr>
+          <tr>
+            <td class="text-left" rowspan="1" colspan="1">
+              <code>chunk_count</code>
+</td>
+            <td class="text-left" rowspan="1" colspan="1">integer</td>
+            <td class="text-left" rowspan="1" colspan="1">Number of DATA chunks.</td>
+          </tr>
+        </tbody>
+      </table>
+<p id="section-7-4">The following fields are optional:<a href="#section-7-4" class="pilcrow">¶</a></p>
+<table class="center" id="table-6">
+        <caption><a href="#table-6" class="selfRef">Table 6</a></caption>
+<thead>
+          <tr>
+            <th class="text-left" rowspan="1" colspan="1">Field</th>
+            <th class="text-left" rowspan="1" colspan="1">Type</th>
+            <th class="text-left" rowspan="1" colspan="1">Description</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="text-left" rowspan="1" colspan="1">
+              <code>raw_size</code>
+</td>
+            <td class="text-left" rowspan="1" colspan="1">integer</td>
+            <td class="text-left" rowspan="1" colspan="1">Size of the uncompressed packed raster.</td>
+          </tr>
+          <tr>
+            <td class="text-left" rowspan="1" colspan="1">
+              <code>created</code>
+</td>
+            <td class="text-left" rowspan="1" colspan="1">string</td>
+            <td class="text-left" rowspan="1" colspan="1">UTC timestamp in Internet date-time format <span>[<a href="#RFC3339" class="cite xref">RFC3339</a>]</span>.</td>
+          </tr>
+          <tr>
+            <td class="text-left" rowspan="1" colspan="1">
+              <code>radio_profile</code>
+</td>
+            <td class="text-left" rowspan="1" colspan="1">string</td>
+            <td class="text-left" rowspan="1" colspan="1">Radio-profile name used by the sender.</td>
+          </tr>
+          <tr>
+            <td class="text-left" rowspan="1" colspan="1">
+              <code>extensions</code>
+</td>
+            <td class="text-left" rowspan="1" colspan="1">object</td>
+            <td class="text-left" rowspan="1" colspan="1">Namespaced manifest extensions.</td>
+          </tr>
+        </tbody>
+      </table>
+<p id="section-7-6">The receiver <span class="bcp14">MUST</span> verify that <code>session_id</code> matches the binary header and
+that <code>chunk_count</code> matches Total Count.  It <span class="bcp14">MUST</span> reject dimensions, sizes,
+or chunk counts that exceed local resource limits.<a href="#section-7-6" class="pilcrow">¶</a></p>
+<p id="section-7-7">An example manifest follows:<a href="#section-7-7" class="pilcrow">¶</a></p>
+<div class="lang-json sourcecode" id="section-7-8">
+<pre>{
+  "bits_per_pixel": 1,
+  "chunk_count": 2,
+  "chunk_size": 192,
+  "content_encoding": "ccitt-group4",
+  "created": "2026-07-25T08:00:00Z",
+  "encoded_size": 246,
+  "extensions": {
+    "org.example.camera": {
+      "position": "north"
+    }
+  },
+  "filename": "weather-map.png",
+  "height": 96,
+  "media_type": "image/tiff",
+  "payload_crc32": 188765321,
+  "payload_sha256": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+  "protocol": "rifp",
+  "protocol_version": "1.0",
+  "radio_profile": "rifp-cpfsk-4800",
+  "raw_size": 1536,
+  "session_id": "0123456789abcdef",
+  "width": 128
+}
+
+</pre><a href="#section-7-8" class="pilcrow">¶</a>
+</div>
+<p id="section-7-9">Extension keys in <code>extensions</code> <span class="bcp14">SHOULD</span> use a reverse-domain or URI-based
+namespace controlled by the extension author.  An extension that is required
+to decode or authenticate the object <span class="bcp14">MUST</span> also be signaled by a critical
+header TLV or critical flag so that an older receiver cannot silently ignore
+it.<a href="#section-7-9" class="pilcrow">¶</a></p>
+<div id="initial-media-and-encoding-combinations">
+<section id="section-7.1">
+        <h3 id="name-initial-media-and-encoding-">
+<a href="#section-7.1" class="section-number selfRef">7.1. </a><a href="#name-initial-media-and-encoding-" class="section-name selfRef">Initial Media and Encoding Combinations</a>
+        </h3>
+<table class="center" id="table-7">
+          <caption><a href="#table-7" class="selfRef">Table 7</a></caption>
+<thead>
+            <tr>
+              <th class="text-left" rowspan="1" colspan="1">Media Type</th>
+              <th class="text-left" rowspan="1" colspan="1">Content Encoding</th>
+              <th class="text-left" rowspan="1" colspan="1">Meaning</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="text-left" rowspan="1" colspan="1">
+                <code>image/tiff</code>
+</td>
+              <td class="text-left" rowspan="1" colspan="1">
+                <code>ccitt-group3</code>
+</td>
+              <td class="text-left" rowspan="1" colspan="1">TIFF containing CCITT Group 3 facsimile data.</td>
+            </tr>
+            <tr>
+              <td class="text-left" rowspan="1" colspan="1">
+                <code>image/tiff</code>
+</td>
+              <td class="text-left" rowspan="1" colspan="1">
+                <code>ccitt-group4</code>
+</td>
+              <td class="text-left" rowspan="1" colspan="1">TIFF containing CCITT Group 4 facsimile data.</td>
+            </tr>
+            <tr>
+              <td class="text-left" rowspan="1" colspan="1">
+                <code>image/png</code>
+</td>
+              <td class="text-left" rowspan="1" colspan="1">
+                <code>identity</code>
+</td>
+              <td class="text-left" rowspan="1" colspan="1">Complete PNG file.</td>
+            </tr>
+            <tr>
+              <td class="text-left" rowspan="1" colspan="1">
+                <code>image/jpeg</code>
+</td>
+              <td class="text-left" rowspan="1" colspan="1">
+                <code>identity</code>
+</td>
+              <td class="text-left" rowspan="1" colspan="1">Complete JPEG file.</td>
+            </tr>
+            <tr>
+              <td class="text-left" rowspan="1" colspan="1">
+                <code>image/rifp-raster</code>
+</td>
+              <td class="text-left" rowspan="1" colspan="1">
+                <code>raw</code>
+</td>
+              <td class="text-left" rowspan="1" colspan="1">Packed grayscale raster.</td>
+            </tr>
+            <tr>
+              <td class="text-left" rowspan="1" colspan="1">
+                <code>image/rifp-raster</code>
+</td>
+              <td class="text-left" rowspan="1" colspan="1">
+                <code>rle8</code>
+</td>
+              <td class="text-left" rowspan="1" colspan="1">Byte-oriented run-length encoding of the packed raster.</td>
+            </tr>
+            <tr>
+              <td class="text-left" rowspan="1" colspan="1">
+                <code>image/rifp-raster</code>
+</td>
+              <td class="text-left" rowspan="1" colspan="1">
+                <code>zlib</code>
+</td>
+              <td class="text-left" rowspan="1" colspan="1">ZLIB-compressed packed raster <span>[<a href="#RFC1950" class="cite xref">RFC1950</a>]</span>.</td>
+            </tr>
+          </tbody>
+        </table>
+<p id="section-7.1-2">For the vendor raster media type, pixels are in row-major order from top left
+to bottom right.  Supported grayscale depths are 1, 2, 4, and 8 bits per pixel.
+Samples are packed most significant sample first.  Rows are not separately
+padded; only the complete pixel sequence is padded with zero-valued samples to
+an octet boundary.<a href="#section-7.1-2" class="pilcrow">¶</a></p>
+<p id="section-7.1-3">The <code>rle8</code> encoding represents each run as two octets: an unsigned run length
+from 1 through 255 followed by the repeated octet value.  A zero run length is
+invalid.<a href="#section-7.1-3" class="pilcrow">¶</a></p>
+</section>
+</div>
+</section>
+</div>
+<div id="fragmentation-repetition-and-reassembly">
+<section id="section-8">
+      <h2 id="name-fragmentation-repetition-an">
+<a href="#section-8" class="section-number selfRef">8. </a><a href="#name-fragmentation-repetition-an" class="section-name selfRef">Fragmentation, Repetition, and Reassembly</a>
+      </h2>
+<p id="section-8-1">The sender chooses a fixed nominal chunk size for a session.  Small chunks
+reduce the cost of losing one frame but increase header overhead.  The initial
+CPFSK profile recommends 192 payload octets per DATA frame.<a href="#section-8-1" class="pilcrow">¶</a></p>
+<p id="section-8-2">A receiver maintains reassembly state keyed by Session ID.  It <span class="bcp14">MUST</span> accept
+valid DATA chunks before the OBJECT_DESCRIPTOR arrives, subject to local resource
+limits.  It <span class="bcp14">MUST</span> de-duplicate frames by at least Session ID, Frame Type,
+Sequence Number, and content.<a href="#section-8-2" class="pilcrow">¶</a></p>
+<p id="section-8-3">A receiver completes a session only when:<a href="#section-8-3" class="pilcrow">¶</a></p>
+<ul class="compact">
+<li class="compact" id="section-8-4.1">a valid OBJECT_DESCRIPTOR is available;<a href="#section-8-4.1" class="pilcrow">¶</a>
+</li>
+        <li class="compact" id="section-8-4.2">every DATA Sequence Number from zero through <code>chunk_count - 1</code> is present;<a href="#section-8-4.2" class="pilcrow">¶</a>
+</li>
+        <li class="compact" id="section-8-4.3">concatenation yields exactly <code>encoded_size</code> octets;<a href="#section-8-4.3" class="pilcrow">¶</a>
+</li>
+        <li class="compact" id="section-8-4.4">CRC-32 matches <code>payload_crc32</code>; and<a href="#section-8-4.4" class="pilcrow">¶</a>
+</li>
+        <li class="compact" id="section-8-4.5">SHA-256 matches <code>payload_sha256</code>.<a href="#section-8-4.5" class="pilcrow">¶</a>
+</li>
+      </ul>
+<p id="section-8-5">The CRC protects against accidental corruption and assists efficient rejection.
+SHA-256 provides stronger object-integrity checking but does not authenticate
+the sender <span>[<a href="#RFC6234" class="cite xref">RFC6234</a>]</span>.<a href="#section-8-5" class="pilcrow">¶</a></p>
+<p id="section-8-6">A receiver <span class="bcp14">SHOULD</span> expire incomplete sessions, limit the number of concurrent
+sessions, limit total buffered bytes, and limit decoded image dimensions.<a href="#section-8-6" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="crc-32">
+<section id="section-9">
+      <h2 id="name-crc-32">
+<a href="#section-9" class="section-number selfRef">9. </a><a href="#name-crc-32" class="section-name selfRef">CRC-32</a>
+      </h2>
+<p id="section-9-1">RIFP uses CRC-32/ISO-HDLC, also commonly called the Ethernet or ZIP CRC-32.  It
+uses the polynomial 0x04C11DB7 in reflected form, initial value 0xFFFFFFFF,
+reflected input and output, and final XOR 0xFFFFFFFF.<a href="#section-9-1" class="pilcrow">¶</a></p>
+<p id="section-9-2">The check value for the ASCII octets <code>123456789</code> is 0xCBF43926.<a href="#section-9-2" class="pilcrow">¶</a></p>
+<p id="section-9-3">The CRC field itself is transmitted as a 32-bit network-order integer and is
+not included in the calculation.<a href="#section-9-3" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="initial-radio-profile-rifp-cpfsk-4800">
+<section id="section-10">
+      <h2 id="name-initial-radio-profile-rifp-">
+<a href="#section-10" class="section-number selfRef">10. </a><a href="#name-initial-radio-profile-rifp-" class="section-name selfRef">Initial Radio Profile: rifp-cpfsk-4800</a>
+      </h2>
+<p id="section-10-1">RIFP does not assign a carrier frequency.  Deployments <span class="bcp14">MUST</span> comply with the
+frequency, power, bandwidth, duty-cycle, equipment, and licensing rules that
+apply in their jurisdiction.<a href="#section-10-1" class="pilcrow">¶</a></p>
+<p id="section-10-2">The <code>rifp-cpfsk-4800</code> profile has these parameters:<a href="#section-10-2" class="pilcrow">¶</a></p>
+<table class="center" id="table-8">
+        <caption><a href="#table-8" class="selfRef">Table 8</a></caption>
+<thead>
+          <tr>
+            <th class="text-left" rowspan="1" colspan="1">Parameter</th>
+            <th class="text-left" rowspan="1" colspan="1">Value</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="text-left" rowspan="1" colspan="1">Modulation</td>
+            <td class="text-left" rowspan="1" colspan="1">Continuous-phase binary FSK</td>
+          </tr>
+          <tr>
+            <td class="text-left" rowspan="1" colspan="1">Symbol rate</td>
+            <td class="text-left" rowspan="1" colspan="1">4800 symbols per second</td>
+          </tr>
+          <tr>
+            <td class="text-left" rowspan="1" colspan="1">Mark deviation</td>
+            <td class="text-left" rowspan="1" colspan="1">+4000 Hz</td>
+          </tr>
+          <tr>
+            <td class="text-left" rowspan="1" colspan="1">Space deviation</td>
+            <td class="text-left" rowspan="1" colspan="1">-4000 Hz</td>
+          </tr>
+          <tr>
+            <td class="text-left" rowspan="1" colspan="1">Symbol mapping</td>
+            <td class="text-left" rowspan="1" colspan="1">bit 1 is mark; bit 0 is space</td>
+          </tr>
+          <tr>
+            <td class="text-left" rowspan="1" colspan="1">Bit order</td>
+            <td class="text-left" rowspan="1" colspan="1">Most significant bit first</td>
+          </tr>
+          <tr>
+            <td class="text-left" rowspan="1" colspan="1">Preamble</td>
+            <td class="text-left" rowspan="1" colspan="1">48 octets of 0x55</td>
+          </tr>
+          <tr>
+            <td class="text-left" rowspan="1" colspan="1">Sync word</td>
+            <td class="text-left" rowspan="1" colspan="1">0xD391C5A7</td>
+          </tr>
+          <tr>
+            <td class="text-left" rowspan="1" colspan="1">Recommended occupied channel bandwidth</td>
+            <td class="text-left" rowspan="1" colspan="1">25 kHz</td>
+          </tr>
+          <tr>
+            <td class="text-left" rowspan="1" colspan="1">Recommended IQ sample rate</td>
+            <td class="text-left" rowspan="1" colspan="1">96000 samples per second</td>
+          </tr>
+        </tbody>
+      </table>
+<p id="section-10-4">Continuous phase is maintained throughout one transmitted frame.  Phase need
+not be continuous between frames.  The preamble and sync word precede every
+frame and are not part of the RIFP CRC calculation.<a href="#section-10-4" class="pilcrow">¶</a></p>
+<p id="section-10-5">A sender <span class="bcp14">MAY</span> use a different sample rate when it is an integer multiple of
+the symbol rate.  Sample rate is an implementation property and is not sent
+over the air.<a href="#section-10-5" class="pilcrow">¶</a></p>
+<p id="section-10-6">A receiver can discover a transmission by energy detection followed by search
+for the synchronization word and validation of a complete RIFP frame.  Energy
+detection alone is not sufficient to identify a RIFP signal.<a href="#section-10-6" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="extensibility-model">
+<section id="section-11">
+      <h2 id="name-extensibility-model">
+<a href="#section-11" class="section-number selfRef">11. </a><a href="#name-extensibility-model" class="section-name selfRef">Extensibility Model</a>
+      </h2>
+<p id="section-11-1">RIFP provides four extension mechanisms:<a href="#section-11-1" class="pilcrow">¶</a></p>
+<ol start="1" type="1" class="compact type-1" id="section-11-2">
+<li id="section-11-2.1">Minor versions for backward-compatible clarifications and additions.<a href="#section-11-2.1" class="pilcrow">¶</a>
+</li>
+        <li id="section-11-2.2">Advisory and critical header flags.<a href="#section-11-2.2" class="pilcrow">¶</a>
+</li>
+        <li id="section-11-2.3">Advisory and critical header TLVs.<a href="#section-11-2.3" class="pilcrow">¶</a>
+</li>
+        <li id="section-11-2.4">Namespaced manifest members and registered media encodings.<a href="#section-11-2.4" class="pilcrow">¶</a>
+</li>
+      </ol>
+<p id="section-11-3">A specification defining a new feature <span class="bcp14">MUST</span> state whether older receivers
+can safely ignore it.  Features affecting decryption, decompression,
+authentication, chunk interpretation, or object integrity normally require a
+critical flag or TLV.<a href="#section-11-3" class="pilcrow">¶</a></p>
+<p id="section-11-4">Potential future extensions include:<a href="#section-11-4" class="pilcrow">¶</a></p>
+<ul class="compact">
+<li class="compact" id="section-11-5.1">forward-error-correction blocks;<a href="#section-11-5.1" class="pilcrow">¶</a>
+</li>
+        <li class="compact" id="section-11-5.2">selective repair requests and acknowledgements;<a href="#section-11-5.2" class="pilcrow">¶</a>
+</li>
+        <li class="compact" id="section-11-5.3">digital signatures and sender certificates;<a href="#section-11-5.3" class="pilcrow">¶</a>
+</li>
+        <li class="compact" id="section-11-5.4">authenticated encryption;<a href="#section-11-5.4" class="pilcrow">¶</a>
+</li>
+        <li class="compact" id="section-11-5.5">fountain or rateless coding;<a href="#section-11-5.5" class="pilcrow">¶</a>
+</li>
+        <li class="compact" id="section-11-5.6">multiple objects in one session;<a href="#section-11-5.6" class="pilcrow">¶</a>
+</li>
+        <li class="compact" id="section-11-5.7">colour and multispectral raster profiles; and<a href="#section-11-5.7" class="pilcrow">¶</a>
+</li>
+        <li class="compact" id="section-11-5.8">radio profiles using LoRa, GMSK, OFDM, audio FSK, or wired transports.<a href="#section-11-5.8" class="pilcrow">¶</a>
+</li>
+      </ul>
+</section>
+</div>
+<div id="security-considerations">
+<section id="section-12">
+      <h2 id="name-security-considerations">
+<a href="#section-12" class="section-number selfRef">12. </a><a href="#name-security-considerations" class="section-name selfRef">Security Considerations</a>
+      </h2>
+<p id="section-12-1">RIFP's CRC and SHA-256 fields provide error detection and object consistency.
+They do not identify the sender and do not prevent deliberate modification by
+an attacker capable of replacing all frames and integrity values.<a href="#section-12-1" class="pilcrow">¶</a></p>
+<p id="section-12-2">Unlicensed and shared radio channels are susceptible to eavesdropping,
+spoofing, replay, traffic analysis, interference, and intentional jamming.
+Applications requiring confidentiality or source authentication <span class="bcp14">MUST</span> use a
+future authenticated-encryption or signature extension, or provide equivalent
+protection outside RIFP.<a href="#section-12-2" class="pilcrow">¶</a></p>
+<p id="section-12-3">Session IDs are not secrets.  Random generation reduces accidental collision
+and makes casual injection into an active session less convenient, but it is
+not an authentication mechanism.<a href="#section-12-3" class="pilcrow">¶</a></p>
+<p id="section-12-4">Receivers process attacker-controlled metadata and compressed image data.
+Implementations <span class="bcp14">MUST</span>:<a href="#section-12-4" class="pilcrow">¶</a></p>
+<ul class="compact">
+<li class="compact" id="section-12-5.1">bound manifest size, object size, dimensions, chunk count, concurrent
+sessions, and decompression output;<a href="#section-12-5.1" class="pilcrow">¶</a>
+</li>
+        <li class="compact" id="section-12-5.2">reject malformed UTF-8 and malformed JSON;<a href="#section-12-5.2" class="pilcrow">¶</a>
+</li>
+        <li class="compact" id="section-12-5.3">protect image decoders against decompression bombs and memory exhaustion;<a href="#section-12-5.3" class="pilcrow">¶</a>
+</li>
+        <li class="compact" id="section-12-5.4">sanitize filenames and never use a received filename as an unrestricted
+filesystem path;<a href="#section-12-5.4" class="pilcrow">¶</a>
+</li>
+        <li class="compact" id="section-12-5.5">avoid executing or interpreting received metadata as code; and<a href="#section-12-5.5" class="pilcrow">¶</a>
+</li>
+        <li class="compact" id="section-12-5.6">reject unknown critical flags and TLVs.<a href="#section-12-5.6" class="pilcrow">¶</a>
+</li>
+      </ul>
+<p id="section-12-6">A receiver should assume that duplicate, reordered, conflicting, and truncated
+frames are normal hostile inputs rather than exceptional conditions.<a href="#section-12-6" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="privacy-considerations">
+<section id="section-13">
+      <h2 id="name-privacy-considerations">
+<a href="#section-13" class="section-number selfRef">13. </a><a href="#name-privacy-considerations" class="section-name selfRef">Privacy Considerations</a>
+      </h2>
+<p id="section-13-1">Image content, filenames, sender identifiers, timestamps, and transmission
+patterns are visible to passive observers in the base protocol.  A stable
+Sender ID can enable long-term tracking.  Deployments <span class="bcp14">SHOULD</span> omit optional
+identifiers that are not operationally necessary.<a href="#section-13-1" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="iana-considerations">
+<section id="section-14">
+      <h2 id="name-iana-considerations">
+<a href="#section-14" class="section-number selfRef">14. </a><a href="#name-iana-considerations" class="section-name selfRef">IANA Considerations</a>
+      </h2>
+<p id="section-14-1">IANA is requested to create a top-level registry named "Radio Image Framing
+Protocol (RIFP) Parameters" containing the following subregistries.
+Registration procedures use the terminology of <span>[<a href="#RFC8126" class="cite xref">RFC8126</a>]</span>.<a href="#section-14-1" class="pilcrow">¶</a></p>
+<div id="rifp-frame-types">
+<section id="section-14.1">
+        <h3 id="name-rifp-frame-types">
+<a href="#section-14.1" class="section-number selfRef">14.1. </a><a href="#name-rifp-frame-types" class="section-name selfRef">RIFP Frame Types</a>
+        </h3>
+<p id="section-14.1-1">The registry contains 8-bit values.  Values 0x00 and 0xFF are Reserved.
+Values 0x01 through 0x3F require Specification Required.  Values 0x40 through
+0x7F are for Experimental Use.  Values 0x80 through 0xFE are for Private Use.<a href="#section-14.1-1" class="pilcrow">¶</a></p>
+<p id="section-14.1-2">Initial registrations are MANIFEST (0x01), DATA (0x02), END (0x03), CANCEL
+(0x04), and OBJECT_DESCRIPTOR (0x05), all referencing this document.<a href="#section-14.1-2" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="rifp-header-tlv-base-types">
+<section id="section-14.2">
+        <h3 id="name-rifp-header-tlv-base-types">
+<a href="#section-14.2" class="section-number selfRef">14.2. </a><a href="#name-rifp-header-tlv-base-types" class="section-name selfRef">RIFP Header TLV Base Types</a>
+        </h3>
+<p id="section-14.2-1">The registry contains 15-bit values because the high bit is the Critical bit.
+Value 0 is Reserved.  Values 1 through 16383 require Specification Required.
+Values 16384 through 32766 are for Private Use.  Value 32767 is Reserved.<a href="#section-14.2-1" class="pilcrow">¶</a></p>
+<p id="section-14.2-2">Initial registrations are Sender ID (1), Radio Profile (2), and Content Hint
+(3), all referencing this document.<a href="#section-14.2-2" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="rifp-flags">
+<section id="section-14.3">
+        <h3 id="name-rifp-flags">
+<a href="#section-14.3" class="section-number selfRef">14.3. </a><a href="#name-rifp-flags" class="section-name selfRef">RIFP Flags</a>
+        </h3>
+<p id="section-14.3-1">The registry records flag bit numbers, names, whether the bit is advisory or
+critical, and references.  Bits 0 through 15 are advisory and bits 16 through
+31 are critical.  Registration requires Specification Required.<a href="#section-14.3-1" class="pilcrow">¶</a></p>
+<p id="section-14.3-2">The initial registration is RETRANSMISSION at bit 0.<a href="#section-14.3-2" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="rifp-content-encodings">
+<section id="section-14.4">
+        <h3 id="name-rifp-content-encodings">
+<a href="#section-14.4" class="section-number selfRef">14.4. </a><a href="#name-rifp-content-encodings" class="section-name selfRef">RIFP Content Encodings</a>
+        </h3>
+<p id="section-14.4-1">Encoding names are case-sensitive ASCII strings.  Registration requires
+Specification Required.  Each registration records compatible media types and
+a reference.<a href="#section-14.4-1" class="pilcrow">¶</a></p>
+<p id="section-14.4-2">Initial registrations are <code>identity</code>, <code>ccitt-group3</code>, <code>ccitt-group4</code>, <code>raw</code>,
+<code>rle8</code>, and <code>zlib</code>.<a href="#section-14.4-2" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="rifp-object-encoding-ids">
+<section id="section-14.5">
+        <h3 id="name-rifp-object-encoding-ids">
+<a href="#section-14.5" class="section-number selfRef">14.5. </a><a href="#name-rifp-object-encoding-ids" class="section-name selfRef">RIFP Object Encoding IDs</a>
+        </h3>
+<p id="section-14.5-1">The registry contains 8-bit values.  Values 0x01 through 0x07 are assigned as
+specified in the Encoding ID Registry above, values 0x08 through 0x7F require
+Specification Required, and values 0x80 through 0xFF are for Private Use.<a href="#section-14.5-1" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="rifp-pixel-format-ids">
+<section id="section-14.6">
+        <h3 id="name-rifp-pixel-format-ids">
+<a href="#section-14.6" class="section-number selfRef">14.6. </a><a href="#name-rifp-pixel-format-ids" class="section-name selfRef">RIFP Pixel Format IDs</a>
+        </h3>
+<p id="section-14.6-1">The registry contains 8-bit values.  Values 0x01 through 0x06 are assigned as
+specified in the Pixel Format Registry above, values 0x07 through 0x7F require
+Specification Required, and values 0x80 through 0xFF are for Private Use.<a href="#section-14.6-1" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="image-rifp-raster-media-type">
+<section id="section-14.7">
+        <h3 id="name-image-rifp-raster-media-typ">
+<a href="#section-14.7" class="section-number selfRef">14.7. </a><a href="#name-image-rifp-raster-media-typ" class="section-name selfRef">image/rifp-raster Media Type</a>
+        </h3>
+<p id="section-14.7-1">IANA is requested to register the following media type according to
+<span>[<a href="#RFC6838" class="cite xref">RFC6838</a>]</span>.<a href="#section-14.7-1" class="pilcrow">¶</a></p>
+<span class="break"></span><dl class="dlCompact dlParallel" id="section-14.7-2">
+          <dt id="section-14.7-2.1">Type name:</dt>
+          <dd style="margin-left: 1.5em" id="section-14.7-2.2">image<a href="#section-14.7-2.2" class="pilcrow">¶</a>
+</dd>
+          <dd class="break"></dd>
+<dt id="section-14.7-2.3">Subtype name:</dt>
+          <dd style="margin-left: 1.5em" id="section-14.7-2.4">rifp-raster<a href="#section-14.7-2.4" class="pilcrow">¶</a>
+</dd>
+          <dd class="break"></dd>
+<dt id="section-14.7-2.5">Required parameters:</dt>
+          <dd style="margin-left: 1.5em" id="section-14.7-2.6">None.<a href="#section-14.7-2.6" class="pilcrow">¶</a>
+</dd>
+          <dd class="break"></dd>
+<dt id="section-14.7-2.7">Optional parameters:</dt>
+          <dd style="margin-left: 1.5em" id="section-14.7-2.8">None.<a href="#section-14.7-2.8" class="pilcrow">¶</a>
+</dd>
+          <dd class="break"></dd>
+<dt id="section-14.7-2.9">Encoding considerations:</dt>
+          <dd style="margin-left: 1.5em" id="section-14.7-2.10">Binary.<a href="#section-14.7-2.10" class="pilcrow">¶</a>
+</dd>
+          <dd class="break"></dd>
+<dt id="section-14.7-2.11">Security considerations:</dt>
+          <dd style="margin-left: 1.5em" id="section-14.7-2.12">See the Security Considerations section of this document.  The dimensions
+and sample depth can cause large allocations, and encoded forms can expand
+substantially during decompression.<a href="#section-14.7-2.12" class="pilcrow">¶</a>
+</dd>
+          <dd class="break"></dd>
+<dt id="section-14.7-2.13">Interoperability considerations:</dt>
+          <dd style="margin-left: 1.5em" id="section-14.7-2.14">Pixel packing and grayscale depths are defined in this document.  The RIFP
+<code>content_encoding</code> value identifies raw, RLE8, or ZLIB representation.<a href="#section-14.7-2.14" class="pilcrow">¶</a>
+</dd>
+          <dd class="break"></dd>
+<dt id="section-14.7-2.15">Published specification:</dt>
+          <dd style="margin-left: 1.5em" id="section-14.7-2.16">This document.<a href="#section-14.7-2.16" class="pilcrow">¶</a>
+</dd>
+          <dd class="break"></dd>
+<dt id="section-14.7-2.17">Applications that use this media type:</dt>
+          <dd style="margin-left: 1.5em" id="section-14.7-2.18">RIFP senders, receivers, gateways, and diagnostic tools.<a href="#section-14.7-2.18" class="pilcrow">¶</a>
+</dd>
+          <dd class="break"></dd>
+<dt id="section-14.7-2.19">Fragment identifier considerations:</dt>
+          <dd style="margin-left: 1.5em" id="section-14.7-2.20">None.<a href="#section-14.7-2.20" class="pilcrow">¶</a>
+</dd>
+          <dd class="break"></dd>
+<dt id="section-14.7-2.21">Additional information:</dt>
+          <dd style="margin-left: 1.5em" id="section-14.7-2.22">No deprecated alias, file extension, or Macintosh file type is defined.<a href="#section-14.7-2.22" class="pilcrow">¶</a>
+</dd>
+          <dd class="break"></dd>
+<dt id="section-14.7-2.23">Person and email address to contact for further information:</dt>
+          <dd style="margin-left: 1.5em" id="section-14.7-2.24">Alexandre Dulaunoy, CIRCL.<a href="#section-14.7-2.24" class="pilcrow">¶</a>
+</dd>
+          <dd class="break"></dd>
+<dt id="section-14.7-2.25">Intended usage:</dt>
+          <dd style="margin-left: 1.5em" id="section-14.7-2.26">COMMON.<a href="#section-14.7-2.26" class="pilcrow">¶</a>
+</dd>
+          <dd class="break"></dd>
+<dt id="section-14.7-2.27">Restrictions on usage:</dt>
+          <dd style="margin-left: 1.5em" id="section-14.7-2.28">None.<a href="#section-14.7-2.28" class="pilcrow">¶</a>
+</dd>
+          <dd class="break"></dd>
+<dt id="section-14.7-2.29">Author:</dt>
+          <dd style="margin-left: 1.5em" id="section-14.7-2.30">Alexandre Dulaunoy.<a href="#section-14.7-2.30" class="pilcrow">¶</a>
+</dd>
+          <dd class="break"></dd>
+<dt id="section-14.7-2.31">Change controller:</dt>
+          <dd style="margin-left: 1.5em" id="section-14.7-2.32">IETF.<a href="#section-14.7-2.32" class="pilcrow">¶</a>
+</dd>
+        <dd class="break"></dd>
+</dl>
+</section>
+</div>
+<div id="rifp-radio-profiles">
+<section id="section-14.8">
+        <h3 id="name-rifp-radio-profiles">
+<a href="#section-14.8" class="section-number selfRef">14.8. </a><a href="#name-rifp-radio-profiles" class="section-name selfRef">RIFP Radio Profiles</a>
+        </h3>
+<p id="section-14.8-1">Profile names are case-sensitive ASCII strings.  Names beginning with <code>x-</code> are
+for Private Use.  Other registrations require Specification Required.<a href="#section-14.8-1" class="pilcrow">¶</a></p>
+<p id="section-14.8-2">The initial registration is <code>rifp-cpfsk-4800</code>.<a href="#section-14.8-2" class="pilcrow">¶</a></p>
+</section>
+</div>
+</section>
+</div>
+<div id="implementation-status">
+<section id="section-15">
+      <h2 id="name-implementation-status">
+<a href="#section-15" class="section-number selfRef">15. </a><a href="#name-implementation-status" class="section-name selfRef">Implementation Status</a>
+      </h2>
+<p id="section-15-1">This section is included while the document is an Internet-Draft and can be
+removed before publication.<a href="#section-15-1" class="pilcrow">¶</a></p>
+<p id="section-15-2">A Python reference implementation <span>[<a href="#RIFP-IMPLEMENTATION" class="cite xref">RIFP-IMPLEMENTATION</a>]</span> supports:<a href="#section-15-2" class="pilcrow">¶</a></p>
+<ul class="compact">
+<li class="compact" id="section-15-3.1">OBJECT_DESCRIPTOR, optional MANIFEST, DATA, END, and CANCEL parsing;<a href="#section-15-3.1" class="pilcrow">¶</a>
+</li>
+        <li class="compact" id="section-15-3.2">extensible headers and unknown-critical-extension rejection;<a href="#section-15-3.2" class="pilcrow">¶</a>
+</li>
+        <li class="compact" id="section-15-3.3">CCITT Group 3 and Group 4 TIFF, PNG, JPEG, raw, RLE, and ZLIB payloads;<a href="#section-15-3.3" class="pilcrow">¶</a>
+</li>
+        <li class="compact" id="section-15-3.4">CPFSK generation and reception through SoapySDR;<a href="#section-15-3.4" class="pilcrow">¶</a>
+</li>
+        <li class="compact" id="section-15-3.5">raw complex64 IQ loopback files;<a href="#section-15-3.5" class="pilcrow">¶</a>
+</li>
+        <li class="compact" id="section-15-3.6">wideband energy discovery followed by sync and CRC validation;<a href="#section-15-3.6" class="pilcrow">¶</a>
+</li>
+        <li class="compact" id="section-15-3.7">image scaling, grayscale quantization, and periodic directory transmission;<a href="#section-15-3.7" class="pilcrow">¶</a>
+</li>
+        <li class="compact" id="section-15-3.8">complete-object CRC-32 and SHA-256 verification; and<a href="#section-15-3.8" class="pilcrow">¶</a>
+</li>
+        <li class="compact" id="section-15-3.9">receiver resource limits and filename sanitization.<a href="#section-15-3.9" class="pilcrow">¶</a>
+</li>
+      </ul>
+</section>
+</div>
+<div id="test-vector">
+<section id="section-16">
+      <h2 id="name-test-vector">
+<a href="#section-16" class="section-number selfRef">16. </a><a href="#name-test-vector" class="section-name selfRef">Test Vector</a>
+      </h2>
+<p id="section-16-1">This test vector omits the radio-profile preamble and synchronization word.
+It is a DATA frame with Session ID 0x0123456789ABCDEF, Sequence Number 1,
+Total Count 2, no flags, no extensions, and the three-octet payload <code>abc</code>.<a href="#section-16-1" class="pilcrow">¶</a></p>
+<div class="alignLeft art-text artwork" id="section-16-2">
+<pre>Base header:
+0100021c000000000123456789abcdef000000010000000200030000
+
+Payload:
+616263
+
+CRC-32:
+ed2bb111
+
+Complete frame after sync word:
+0100021c000000000123456789abcdef000000010000000200030000
+616263ed2bb111
+
+</pre><a href="#section-16-2" class="pilcrow">¶</a>
+</div>
+</section>
+</div>
+<div id="references">
+<section id="section-17">
+      <h2 id="name-references">
+<a href="#section-17" class="section-number selfRef">17. </a><a href="#name-references" class="section-name selfRef">References</a>
+    </h2>
+</section>
+</div>
+<section id="section-18">
+      <h2 id="name-references-2">
+<a href="#section-18" class="section-number selfRef">18. </a><a href="#name-references-2" class="section-name selfRef">References</a>
+      </h2>
+<section id="section-18.1">
+        <h3 id="name-normative-references">
+<a href="#section-18.1" class="section-number selfRef">18.1. </a><a href="#name-normative-references" class="section-name selfRef">Normative References</a>
+        </h3>
+<dl class="references">
+<dt id="RFC1950">[RFC1950]</dt>
+        <dd>
+<span class="refAuthor">Deutsch, P.</span> and <span class="refAuthor">J. Gailly</span>, <span class="refTitle">"ZLIB Compressed Data Format Specification version 3.3"</span>, <span class="seriesInfo">RFC 1950</span>, <span class="seriesInfo">DOI 10.17487/RFC1950</span>, <time datetime="1996-05" class="refDate">May 1996</time>, <span>&lt;<a href="https://www.rfc-editor.org/info/rfc1950">https://www.rfc-editor.org/info/rfc1950</a>&gt;</span>. </dd>
+<dd class="break"></dd>
+<dt id="RFC2119">[RFC2119]</dt>
+        <dd>
+<span class="refAuthor">Bradner, S.</span>, <span class="refTitle">"Key words for use in RFCs to Indicate Requirement Levels"</span>, <span class="seriesInfo">BCP 14</span>, <span class="seriesInfo">RFC 2119</span>, <span class="seriesInfo">DOI 10.17487/RFC2119</span>, <time datetime="1997-03" class="refDate">March 1997</time>, <span>&lt;<a href="https://www.rfc-editor.org/info/rfc2119">https://www.rfc-editor.org/info/rfc2119</a>&gt;</span>. </dd>
+<dd class="break"></dd>
+<dt id="RFC3339">[RFC3339]</dt>
+        <dd>
+<span class="refAuthor">Klyne, G.</span> and <span class="refAuthor">C. Newman</span>, <span class="refTitle">"Date and Time on the Internet: Timestamps"</span>, <span class="seriesInfo">RFC 3339</span>, <span class="seriesInfo">DOI 10.17487/RFC3339</span>, <time datetime="2002-07" class="refDate">July 2002</time>, <span>&lt;<a href="https://www.rfc-editor.org/info/rfc3339">https://www.rfc-editor.org/info/rfc3339</a>&gt;</span>. </dd>
+<dd class="break"></dd>
+<dt id="RFC6234">[RFC6234]</dt>
+        <dd>
+<span class="refAuthor">Eastlake 3rd, D.</span> and <span class="refAuthor">T. Hansen</span>, <span class="refTitle">"US Secure Hash Algorithms (SHA and SHA-based HMAC and HKDF)"</span>, <span class="seriesInfo">RFC 6234</span>, <span class="seriesInfo">DOI 10.17487/RFC6234</span>, <time datetime="2011-05" class="refDate">May 2011</time>, <span>&lt;<a href="https://www.rfc-editor.org/info/rfc6234">https://www.rfc-editor.org/info/rfc6234</a>&gt;</span>. </dd>
+<dd class="break"></dd>
+<dt id="RFC6838">[RFC6838]</dt>
+        <dd>
+<span class="refAuthor">Freed, N.</span>, <span class="refAuthor">Klensin, J.</span>, and <span class="refAuthor">T. Hansen</span>, <span class="refTitle">"Media Type Specifications and Registration Procedures"</span>, <span class="seriesInfo">BCP 13</span>, <span class="seriesInfo">RFC 6838</span>, <span class="seriesInfo">DOI 10.17487/RFC6838</span>, <time datetime="2013-01" class="refDate">January 2013</time>, <span>&lt;<a href="https://www.rfc-editor.org/info/rfc6838">https://www.rfc-editor.org/info/rfc6838</a>&gt;</span>. </dd>
+<dd class="break"></dd>
+<dt id="RFC8126">[RFC8126]</dt>
+        <dd>
+<span class="refAuthor">Cotton, M.</span>, <span class="refAuthor">Leiba, B.</span>, and <span class="refAuthor">T. Narten</span>, <span class="refTitle">"Guidelines for Writing an IANA Considerations Section in RFCs"</span>, <span class="seriesInfo">BCP 26</span>, <span class="seriesInfo">RFC 8126</span>, <span class="seriesInfo">DOI 10.17487/RFC8126</span>, <time datetime="2017-06" class="refDate">June 2017</time>, <span>&lt;<a href="https://www.rfc-editor.org/info/rfc8126">https://www.rfc-editor.org/info/rfc8126</a>&gt;</span>. </dd>
+<dd class="break"></dd>
+<dt id="RFC8174">[RFC8174]</dt>
+        <dd>
+<span class="refAuthor">Leiba, B.</span>, <span class="refTitle">"Ambiguity of Uppercase vs Lowercase in RFC 2119 Key Words"</span>, <span class="seriesInfo">BCP 14</span>, <span class="seriesInfo">RFC 8174</span>, <span class="seriesInfo">DOI 10.17487/RFC8174</span>, <time datetime="2017-05" class="refDate">May 2017</time>, <span>&lt;<a href="https://www.rfc-editor.org/info/rfc8174">https://www.rfc-editor.org/info/rfc8174</a>&gt;</span>. </dd>
+<dd class="break"></dd>
+<dt id="RFC8259">[RFC8259]</dt>
+      <dd>
+<span class="refAuthor">Bray, T., Ed.</span>, <span class="refTitle">"The JavaScript Object Notation (JSON) Data Interchange Format"</span>, <span class="seriesInfo">STD 90</span>, <span class="seriesInfo">RFC 8259</span>, <span class="seriesInfo">DOI 10.17487/RFC8259</span>, <time datetime="2017-12" class="refDate">December 2017</time>, <span>&lt;<a href="https://www.rfc-editor.org/info/rfc8259">https://www.rfc-editor.org/info/rfc8259</a>&gt;</span>. </dd>
+<dd class="break"></dd>
+</dl>
+</section>
+<section id="section-18.2">
+        <h3 id="name-informative-references">
+<a href="#section-18.2" class="section-number selfRef">18.2. </a><a href="#name-informative-references" class="section-name selfRef">Informative References</a>
+        </h3>
+<dl class="references">
+<dt id="RIFP-IMPLEMENTATION">[RIFP-IMPLEMENTATION]</dt>
+      <dd>
+<span class="refAuthor">Implementation, R. P.</span>, <span class="refTitle">"Radio Image Framing Protocol"</span>, <span>&lt;<a href="https://github.com/adulau/rifp">https://github.com/adulau/rifp</a>&gt;</span>. </dd>
+<dd class="break"></dd>
+</dl>
+</section>
+</section>
+<div id="acknowledgements">
+<section id="appendix-A">
+      <h2 id="name-acknowledgements">
+<a href="#appendix-A" class="section-number selfRef">Appendix A. </a><a href="#name-acknowledgements" class="section-name selfRef">Acknowledgements</a>
+      </h2>
+<p id="appendix-A-1">The author thanks the amateur-radio, software-defined-radio, facsimile, and
+open-source communities whose experiments motivated this protocol design.<a href="#appendix-A-1" class="pilcrow">¶</a></p>
+</section>
+</div>
+<div id="authors-addresses">
+<section id="appendix-B">
+      <h2 id="name-authors-address">
+<a href="#name-authors-address" class="section-name selfRef">Author's Address</a>
+      </h2>
+<address class="vcard">
+        <div dir="auto" class="left"><span class="fn nameRole">Alexandre Dulaunoy</span></div>
+<div dir="auto" class="left"><span class="org">Computer Incident Response Center Luxembourg</span></div>
+<div dir="auto" class="left"><span class="street-address">122, rue Adolphe Fischer</span></div>
+<div dir="auto" class="left">L-<span class="postal-code">L-1521</span> <span class="locality">Luxembourg</span>
+</div>
+<div dir="auto" class="left"><span class="country-name">Luxembourg</span></div>
+<div class="tel">
+<span>Phone:</span>
+<a href="tel:+352%20247%2088444" class="tel">+352 247 88444</a>
+</div>
+<div class="email">
+<span>Email:</span>
+<a href="mailto:alexandre.dulaunoy@circl.lu" class="email">alexandre.dulaunoy@circl.lu</a>
+</div>
+</address>
+</section>
+</div>
+<script>const toc = document.getElementById("toc");
+toc.querySelector("h2").addEventListener("click", e => {
+  toc.classList.toggle("active");
+});
+toc.querySelector("nav").addEventListener("click", e => {
+  toc.classList.remove("active");
+});
+</script>
+</body>
+</html>

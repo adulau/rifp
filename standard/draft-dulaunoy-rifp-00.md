@@ -11,7 +11,7 @@ category = "info"
 [seriesInfo]
 status = "experimental"
 name = "Internet-Draft"
-value = "draft-dulaunoy-rifp-00"
+value = "draft-dulaunoy-rifp-01"
 stream = "independent"
 date = 2026-07-28T00:00:00Z
 
