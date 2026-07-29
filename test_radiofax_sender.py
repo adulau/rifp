@@ -6,9 +6,11 @@ from __future__ import annotations
 import sys
 import types
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
-from radiofax_sender import SoapyTransmitter
+from radiofax_sender import EncodedImage, SoapyTransmitter, make_transmission_frames
+from rifp_protocol import FRAME_MANIFEST, FRAME_OBJECT_DESCRIPTOR, ObjectDescriptor
 
 
 class FakeDevice:
@@ -24,6 +26,19 @@ class FakeDevice:
 
 
 class SoapyTransmitterTests(unittest.TestCase):
+    def test_compact_descriptor_is_default_and_json_is_opt_in(self) -> None:
+        encoded = EncodedImage(Path("test.png"), "raw", b"abcd", 2, 2, 8, "test.png", 4)
+        frames, _ = make_transmission_frames(encoded, 7, 2, 1, 0, 1, "test", {})
+        self.assertEqual(frames[0].frame_type, FRAME_OBJECT_DESCRIPTOR)
+        self.assertNotIn(FRAME_MANIFEST, [frame.frame_type for frame in frames])
+        descriptor = ObjectDescriptor.decode(frames[0].payload)
+        self.assertEqual((descriptor.encoded_size, descriptor.chunk_size), (4, 2))
+
+        extended, _ = make_transmission_frames(
+            encoded, 7, 2, 1, 0, 1, "test", {}, extended_manifest=True
+        )
+        self.assertEqual([frame.frame_type for frame in extended[:2]], [FRAME_OBJECT_DESCRIPTOR, FRAME_MANIFEST])
+
     def make_soapy_module(self, device: FakeDevice) -> types.ModuleType:
         module = types.ModuleType("SoapySDR")
         module.SOAPY_SDR_CF32 = 1

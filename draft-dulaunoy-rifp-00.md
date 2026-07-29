@@ -759,7 +759,7 @@ The initial registration is `rifp-cpfsk-4800`.
 This section is included while the document is an Internet-Draft and can be
 removed before publication.
 
-A Python reference implementation [@?RIFP-IMPLEMENTATION] supports:
+A Python reference implementation supports:
 
 * OBJECT_DESCRIPTOR, optional MANIFEST, DATA, END, and CANCEL parsing;
 * extensible headers and unknown-critical-extension rejection;
@@ -791,16 +791,6 @@ Complete frame after sync word:
 0100021c000000000123456789abcdef000000010000000200030000
 616263ed2bb111
 ~~~
-
-# References
-
-<reference anchor='RIFP-IMPLEMENTATION' target='https://github.com/adulau/rifp'>
-  <front>
-   <title>Radio Image Framing Protocol</title>
-   <author initials='' surname='RIFP-IMPLEMENTATION' fullname='RIFP Python Implementation'></author>
-   <date></date>
-  </front>
-</reference>
 
 {backmatter}
 

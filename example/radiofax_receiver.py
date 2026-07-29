@@ -28,15 +28,28 @@ from PIL import Image
 
 from rifp_protocol import (
     CRC32,
+    ENCODING_CCITT_GROUP3,
+    ENCODING_CCITT_GROUP4,
+    ENCODING_JPEG,
+    ENCODING_PNG,
+    ENCODING_RAW,
+    ENCODING_RLE,
+    ENCODING_ZLIB,
     END_PAYLOAD,
     FRAME_CANCEL,
     FRAME_DATA,
     FRAME_END,
     FRAME_MANIFEST,
+    FRAME_OBJECT_DESCRIPTOR,
     HeaderExtension,
     KNOWN_FRAME_TYPES,
     MAX_WIRE_PAYLOAD,
     MIN_HEADER_LENGTH,
+    ObjectDescriptor,
+    PIXEL_GRAY1,
+    PIXEL_GRAY2,
+    PIXEL_GRAY4,
+    PIXEL_GRAY8,
     PROTOCOL_NAME,
     ProtocolError,
     SYNC_WORD,
@@ -69,6 +82,8 @@ class ReceiveSession:
     session_id: int
     total_chunks: int | None = None
     manifest: dict[str, object] | None = None
+    descriptor: ObjectDescriptor | None = None
+    extended_manifest: dict[str, object] | None = None
     chunks: dict[int, bytes] = field(default_factory=dict)
     last_seen: float = field(default_factory=time.monotonic)
     completed: bool = False
@@ -256,6 +271,43 @@ def sanitize_filename(name: str) -> str:
     return name or "image"
 
 
+def descriptor_manifest(descriptor: ObjectDescriptor) -> dict[str, object]:
+    media_encoding = {
+        ENCODING_CCITT_GROUP3: ("image/tiff", "ccitt-group3"),
+        ENCODING_CCITT_GROUP4: ("image/tiff", "ccitt-group4"),
+        ENCODING_PNG: ("image/png", "identity"),
+        ENCODING_JPEG: ("image/jpeg", "identity"),
+        ENCODING_RAW: ("image/rifp-raster", "raw"),
+        ENCODING_RLE: ("image/rifp-raster", "rle8"),
+        ENCODING_ZLIB: ("image/rifp-raster", "zlib"),
+    }
+    pixel_bits = {PIXEL_GRAY1: 1, PIXEL_GRAY2: 2, PIXEL_GRAY4: 4, PIXEL_GRAY8: 8}
+    if descriptor.encoding_id not in media_encoding:
+        raise ValueError(f"unsupported private encoding ID 0x{descriptor.encoding_id:02x}")
+    if descriptor.pixel_format not in pixel_bits:
+        raise ValueError(f"unsupported pixel format ID 0x{descriptor.pixel_format:02x}")
+    media_type, content_encoding = media_encoding[descriptor.encoding_id]
+    return {
+        "media_type": media_type,
+        "content_encoding": content_encoding,
+        "width": descriptor.width,
+        "height": descriptor.height,
+        "bits_per_pixel": pixel_bits[descriptor.pixel_format],
+        "encoded_size": descriptor.encoded_size,
+        "payload_crc32": descriptor.payload_crc32,
+        "payload_sha256": descriptor.payload_sha256.hex(),
+        "chunk_size": descriptor.chunk_size,
+    }
+
+
+def manifests_agree(compact: dict[str, object], extended: dict[str, object], total: int) -> bool:
+    shared = (
+        "media_type", "content_encoding", "width", "height", "bits_per_pixel",
+        "encoded_size", "payload_crc32", "payload_sha256", "chunk_size",
+    )
+    return all(str(compact[key]).lower() == str(extended.get(key, "")).lower() for key in shared) and int(extended.get("chunk_count", -1)) == total
+
+
 def decode_image_payload(payload: bytes, manifest: dict[str, object], max_pixels: int) -> Image.Image:
     media_type = str(manifest.get("media_type", ""))
     content_encoding = str(manifest.get("content_encoding", ""))
@@ -287,6 +339,11 @@ def decode_image_payload(payload: bytes, manifest: dict[str, object], max_pixels
                 image = opened.convert("L")
         if image.width != width or image.height != height:
             raise ValueError("decoded image dimensions do not match manifest")
+        if bits_per_pixel < 8:
+            levels = (1 << bits_per_pixel) - 1
+            allowed = np.rint(np.arange(levels + 1) * 255.0 / levels).astype(np.uint8)
+            if not np.all(np.isin(np.asarray(image, dtype=np.uint8), allowed)):
+                raise ValueError("decoded pixels do not match the declared pixel format")
         return image
 
     bytes_per_image = math.ceil(width * height * bits_per_pixel / 8)
@@ -333,20 +390,48 @@ class SessionManager:
             del self.sessions[oldest_id]
         session = self.sessions.setdefault(frame.session_id, ReceiveSession(frame.session_id))
         session.last_seen = time.monotonic()
-        if frame.total > 0:
+        if frame.frame_type in (FRAME_OBJECT_DESCRIPTOR, FRAME_MANIFEST, FRAME_DATA) and frame.total > 0:
             if session.total_chunks is not None and session.total_chunks != frame.total:
                 print(
-                    f"session {frame.session_id:016x}: conflicting chunk total; resetting",
+                    f"session {frame.session_id:016x}: conflicting chunk total; abandoning session",
                     file=sys.stderr,
                 )
-                session.chunks.clear()
-                session.received_bytes = 0
+                del self.sessions[frame.session_id]
+                return
             session.total_chunks = frame.total
 
-        if frame.frame_type == FRAME_MANIFEST:
+        if frame.frame_type == FRAME_OBJECT_DESCRIPTOR:
+            try:
+                if frame.sequence != 0 or frame.total < 1:
+                    raise ValueError("descriptor header sequence/total is invalid")
+                descriptor = ObjectDescriptor.decode(frame.payload)
+                if descriptor.encoded_size > self.max_image_bytes:
+                    raise ValueError("encoded image exceeds configured size limit")
+                expected_chunks = math.ceil(descriptor.encoded_size / descriptor.chunk_size)
+                if expected_chunks != frame.total:
+                    raise ValueError("descriptor size and chunk count are inconsistent")
+                compact = descriptor_manifest(descriptor)
+                if session.descriptor is not None and session.descriptor != descriptor:
+                    raise ValueError("conflicting compact descriptor")
+                if session.extended_manifest is not None and not manifests_agree(compact, session.extended_manifest, frame.total):
+                    raise ValueError("compact descriptor conflicts with JSON manifest")
+                session.descriptor = descriptor
+                session.manifest = {**compact, **({"filename": session.extended_manifest.get("filename", "image")} if session.extended_manifest else {})}
+                print(
+                    f"session {frame.session_id:016x}: descriptor "
+                    f"{descriptor.width}x{descriptor.height} encoding=0x{descriptor.encoding_id:02x} "
+                    f"chunks={frame.total}"
+                )
+            except Exception as exc:
+                print(f"session {frame.session_id:016x}: invalid descriptor: {exc}; abandoning session", file=sys.stderr)
+                del self.sessions[frame.session_id]
+                return
+        elif frame.frame_type == FRAME_MANIFEST:
             if len(frame.payload) > MAX_MANIFEST_BYTES:
                 return
             try:
+                if frame.sequence != 0 or frame.total < 1:
+                    raise ValueError("manifest header sequence/total is invalid")
                 manifest = json.loads(frame.payload.decode("utf-8"))
                 if not isinstance(manifest, dict):
                     raise ValueError("manifest is not an object")
@@ -382,7 +467,14 @@ class SessionManager:
                 profile = extension_text(frame.extensions, TLV_RADIO_PROFILE) or manifest.get("radio_profile", "unknown")
                 sender = extension_text(frame.extensions, TLV_SENDER_ID)
                 hint = extension_text(frame.extensions, TLV_CONTENT_HINT)
-                session.manifest = manifest
+                if session.descriptor is not None:
+                    compact = descriptor_manifest(session.descriptor)
+                    if not manifests_agree(compact, manifest, frame.total):
+                        raise ValueError("JSON manifest conflicts with compact descriptor")
+                    session.manifest = {**compact, "filename": manifest.get("filename", "image")}
+                else:
+                    session.manifest = manifest
+                session.extended_manifest = manifest
                 session.total_chunks = chunk_count
                 sender_note = f" sender={sender}" if sender else ""
                 hint_note = f" hint={hint!r}" if hint else ""
@@ -393,9 +485,12 @@ class SessionManager:
                     f"profile={profile}{sender_note}{hint_note}"
                 )
             except Exception as exc:
-                print(f"session {frame.session_id:016x}: invalid manifest: {exc}", file=sys.stderr)
+                print(f"session {frame.session_id:016x}: invalid manifest: {exc}; abandoning session", file=sys.stderr)
+                del self.sessions[frame.session_id]
                 return
         elif frame.frame_type == FRAME_DATA:
+            if frame.total < 1:
+                return
             if session.total_chunks is not None and frame.sequence >= session.total_chunks:
                 return
             existing = session.chunks.get(frame.sequence)
@@ -417,15 +512,43 @@ class SessionManager:
                 session.received_bytes += len(frame.payload)
                 print(f"session {frame.session_id:016x}: received chunk {frame.sequence + 1}, progress {session.progress()}")
         elif frame.frame_type == FRAME_END:
-            if len(frame.payload) == END_PAYLOAD.size:
-                encoded_size, payload_crc32, payload_sha256 = END_PAYLOAD.unpack(frame.payload)
-                if session.manifest is not None:
-                    if encoded_size != int(session.manifest.get("encoded_size", -1)):
-                        print(f"session {frame.session_id:016x}: END size differs from manifest", file=sys.stderr)
-                    if payload_crc32 != int(session.manifest.get("payload_crc32", -1)):
-                        print(f"session {frame.session_id:016x}: END CRC differs from manifest", file=sys.stderr)
-                    if payload_sha256.hex() != str(session.manifest.get("payload_sha256", "")).lower():
-                        print(f"session {frame.session_id:016x}: END SHA-256 differs from manifest", file=sys.stderr)
+            if (
+                frame.sequence != frame.total
+                or frame.total < 1
+                or (session.total_chunks is not None and frame.total != session.total_chunks)
+            ):
+                print(
+                    f"session {frame.session_id:016x}: invalid END header; abandoning session",
+                    file=sys.stderr,
+                )
+                del self.sessions[frame.session_id]
+                return
+            if len(frame.payload) != END_PAYLOAD.size:
+                print(
+                    f"session {frame.session_id:016x}: invalid END payload; abandoning session",
+                    file=sys.stderr,
+                )
+                del self.sessions[frame.session_id]
+                return
+            encoded_size, payload_crc32, payload_sha256 = END_PAYLOAD.unpack(frame.payload)
+            if session.descriptor is not None and (
+                encoded_size != session.descriptor.encoded_size
+                or payload_crc32 != session.descriptor.payload_crc32
+                or payload_sha256 != session.descriptor.payload_sha256
+            ):
+                print(
+                    f"session {frame.session_id:016x}: END conflicts with descriptor; abandoning session",
+                    file=sys.stderr,
+                )
+                del self.sessions[frame.session_id]
+                return
+            if session.manifest is not None:
+                if encoded_size != int(session.manifest.get("encoded_size", -1)):
+                    print(f"session {frame.session_id:016x}: END size differs from manifest", file=sys.stderr)
+                if payload_crc32 != int(session.manifest.get("payload_crc32", -1)):
+                    print(f"session {frame.session_id:016x}: END CRC differs from manifest", file=sys.stderr)
+                if payload_sha256.hex() != str(session.manifest.get("payload_sha256", "")).lower():
+                    print(f"session {frame.session_id:016x}: END SHA-256 differs from manifest", file=sys.stderr)
             print(f"session {frame.session_id:016x}: end marker, progress {session.progress()}")
         elif frame.frame_type == FRAME_CANCEL:
             print(f"session {frame.session_id:016x}: cancelled by sender")
@@ -435,7 +558,12 @@ class SessionManager:
         self._try_complete(session)
 
     def _try_complete(self, session: ReceiveSession) -> None:
-        if session.completed or session.manifest is None or session.total_chunks is None:
+        if (
+            session.completed
+            or session.descriptor is None
+            or session.manifest is None
+            or session.total_chunks is None
+        ):
             return
         if len(session.chunks) < session.total_chunks:
             return

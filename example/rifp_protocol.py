@@ -32,13 +32,40 @@ FRAME_MANIFEST = 0x01
 FRAME_DATA = 0x02
 FRAME_END = 0x03
 FRAME_CANCEL = 0x04
+FRAME_OBJECT_DESCRIPTOR = 0x05
 
 KNOWN_FRAME_TYPES = {
     FRAME_MANIFEST,
     FRAME_DATA,
     FRAME_END,
     FRAME_CANCEL,
+    FRAME_OBJECT_DESCRIPTOR,
 }
+
+# OBJECT_DESCRIPTOR payload (version 1).  The fixed layout is deliberately
+# small enough for constrained radio packets and embedded implementations.
+OBJECT_DESCRIPTOR_VERSION = 1
+OBJECT_DESCRIPTOR = struct.Struct(">BBBBHHHHQI32s")
+
+ENCODING_CCITT_GROUP3 = 0x01
+ENCODING_CCITT_GROUP4 = 0x02
+ENCODING_PNG = 0x03
+ENCODING_JPEG = 0x04
+ENCODING_RAW = 0x05
+ENCODING_RLE = 0x06
+ENCODING_ZLIB = 0x07
+
+PIXEL_GRAY1 = 0x01
+PIXEL_GRAY2 = 0x02
+PIXEL_GRAY4 = 0x03
+PIXEL_GRAY8 = 0x04
+PIXEL_RGB888 = 0x05
+PIXEL_RGBA8888 = 0x06
+
+KNOWN_ENCODINGS = frozenset(range(ENCODING_CCITT_GROUP3, ENCODING_ZLIB + 1))
+KNOWN_PIXEL_FORMATS = frozenset(
+    (PIXEL_GRAY1, PIXEL_GRAY2, PIXEL_GRAY4, PIXEL_GRAY8, PIXEL_RGB888, PIXEL_RGBA8888)
+)
 
 # Flags 0-15 are advisory.  Flags 16-31 are critical: a receiver that does
 # not understand a set critical flag must discard the frame.
@@ -102,6 +129,53 @@ class ParsedFrame:
     header: FrameHeader
     payload: bytes
     crc32: int
+
+
+@dataclass(frozen=True)
+class ObjectDescriptor:
+    encoding_id: int
+    pixel_format: int
+    width: int
+    height: int
+    chunk_size: int
+    encoded_size: int
+    payload_crc32: int
+    payload_sha256: bytes
+    version: int = OBJECT_DESCRIPTOR_VERSION
+
+    def encode(self) -> bytes:
+        if self.version != OBJECT_DESCRIPTOR_VERSION:
+            raise ProtocolError(f"unsupported object descriptor version {self.version}")
+        if self.encoding_id not in KNOWN_ENCODINGS and not 0x80 <= self.encoding_id <= 0xFF:
+            raise ProtocolError("unregistered object encoding ID")
+        if self.pixel_format not in KNOWN_PIXEL_FORMATS and not 0x80 <= self.pixel_format <= 0xFF:
+            raise ProtocolError("unregistered pixel format ID")
+        if not 1 <= self.width <= 0xFFFF or not 1 <= self.height <= 0xFFFF:
+            raise ProtocolError("descriptor dimensions are outside the 16-bit range")
+        if not 1 <= self.chunk_size <= 0xFFFF:
+            raise ProtocolError("descriptor chunk size is outside the 16-bit range")
+        if not 0 <= self.encoded_size <= 0xFFFFFFFFFFFFFFFF:
+            raise ProtocolError("descriptor encoded size is outside the 64-bit range")
+        if not 0 <= self.payload_crc32 <= 0xFFFFFFFF:
+            raise ProtocolError("descriptor payload CRC-32 is outside the 32-bit range")
+        if len(self.payload_sha256) != 32:
+            raise ProtocolError("descriptor SHA-256 must contain 32 bytes")
+        return OBJECT_DESCRIPTOR.pack(
+            self.version, self.encoding_id, self.pixel_format, 0,
+            self.width, self.height, self.chunk_size, 0,
+            self.encoded_size, self.payload_crc32, self.payload_sha256,
+        )
+
+    @classmethod
+    def decode(cls, payload: bytes) -> "ObjectDescriptor":
+        if len(payload) != OBJECT_DESCRIPTOR.size:
+            raise ProtocolError("OBJECT_DESCRIPTOR payload must be exactly 56 bytes")
+        version, encoding, pixel, reserved1, width, height, chunk_size, reserved2, size, crc, sha = OBJECT_DESCRIPTOR.unpack(payload)
+        if reserved1 or reserved2:
+            raise ProtocolError("non-zero reserved OBJECT_DESCRIPTOR field")
+        descriptor = cls(encoding, pixel, width, height, chunk_size, size, crc, sha, version)
+        descriptor.encode()  # Apply the same registry and range validation.
+        return descriptor
 
 
 def encode_extensions(extensions: Iterable[HeaderExtension]) -> bytes:
