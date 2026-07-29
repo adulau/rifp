@@ -36,7 +36,8 @@ This document specifies the Radio Image Framing Protocol (RIFP), a compact,
 unidirectional object-transfer protocol intended for transmitting images over
 low-rate radio links.  RIFP defines independently synchronized frames, a
 versioned and extensible binary header, fragmentation and reassembly rules, a
-JSON manifest, per-frame CRC-32 protection, whole-object SHA-256 verification,
+fixed binary object descriptor, optional JSON metadata, per-frame CRC-32
+protection, whole-object SHA-256 verification,
 and registries for future frame types, flags, header extensions, media
 encodings, and radio profiles.
 
@@ -103,11 +104,11 @@ A sender performs the following operations:
 
 1. It scales and encodes an image.
 2. It assigns a 64-bit Session ID.
-3. It constructs a JSON manifest describing the object.
+3. It constructs a fixed binary OBJECT_DESCRIPTOR describing the object.
 4. It divides the encoded object into numbered chunks.
-5. It sends one or more MANIFEST frames, DATA frames for each chunk, and an
-   END frame.
-6. It MAY repeat any MANIFEST or DATA frame.
+5. It sends one or more OBJECT_DESCRIPTOR frames, DATA frames for each chunk,
+   and an END frame.  It MAY additionally send a JSON MANIFEST.
+6. It MAY repeat any OBJECT_DESCRIPTOR, MANIFEST, or DATA frame.
 
 A receiver searches for the radio-profile synchronization word, parses the
 RIFP header, rejects unsupported critical features, validates the frame CRC,
@@ -269,14 +270,17 @@ MANIFEST frames as duplicates.  If two valid manifests for the same session
 conflict, the receiver **MUST NOT** combine their DATA chunks unless a future
 extension defines conflict resolution.
 
+MANIFEST is optional extended, human-oriented metadata.  It is not required
+to receive or decode an object when an OBJECT_DESCRIPTOR is present.
+
 ## DATA Frame
 
 Frame Type 2 is DATA.  The payload contains one contiguous chunk of the
 encoded object.  Sequence Number is zero-based.  Total Count is the number of
-chunks in the session and **MUST** match the manifest.
+chunks in the session and **MUST** match the OBJECT_DESCRIPTOR.
 
-All DATA frames except the final one **SHOULD** have the manifest's
-`chunk_size`.  The final DATA frame **MAY** be shorter.  A receiver **MUST**
+All DATA frames except the final one **SHOULD** have the descriptor's DATA
+Chunk Size.  The final DATA frame **MAY** be shorter.  A receiver **MUST**
 ignore a DATA frame whose Sequence Number is greater than or equal to Total
 Count.
 
@@ -307,8 +311,8 @@ number of DATA chunks.  Its payload is exactly 44 octets:
 ~~~
 
 The END frame is a completion hint and repeats integrity values from the
-manifest.  Receipt of END is not required for completion when the manifest and
-all DATA chunks have already been received and verified.
+OBJECT_DESCRIPTOR.  Receipt of END is not required for completion when the
+descriptor and all DATA chunks have already been received and verified.
 
 ## CANCEL Frame
 
@@ -317,13 +321,93 @@ session.  Sequence Number and Total Count **SHOULD** be zero.  The payload
 **MAY** be empty or contain a short UTF-8 reason.  A receiver **SHOULD** discard
 incomplete state for the indicated Session ID.
 
+## OBJECT_DESCRIPTOR Frame
+
+Frame Type 5 is OBJECT_DESCRIPTOR.  It is the mandatory baseline manifest for
+RIFP 1.0.  Its fixed 56-octet payload is machine-oriented and contains all
+information needed to allocate, reassemble, validate, and decode an image:
+
+~~~
+  0                   1                   2                   3
+  0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
+ +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+ | Desc. Version |  Encoding ID  | Pixel Format  |    Reserved   |
+ +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+ |         Width                 |          Height               |
+ +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+ |       DATA Chunk Size         |          Reserved             |
+ +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+ |                                                               |
+ +                    Encoded Size (64 bits)                     +
+ |                                                               |
+ +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+ |                    Payload CRC-32 (32 bits)                    |
+ +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+ |                                                               |
+ +                                                               +
+ |                                                               |
+ +                    Payload SHA-256 (256 bits)                  +
+ |                                                               |
+ +                                                               +
+ |                                                               |
+ +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+~~~
+
+Descriptor Version is 1.  Both Reserved fields **MUST** be zero.  Width and
+Height are unsigned 16-bit pixel dimensions and **MUST** be non-zero.  DATA
+Chunk Size is the non-zero nominal DATA payload length.  Encoded Size is the
+complete encoded object's length.  Payload CRC-32 and Payload SHA-256 cover
+the complete encoded object.  Sequence Number **MUST** be zero, Total Count
+**MUST** equal the number of DATA frames, and Payload Length **MUST** be 56.
+An unknown Descriptor Version **MUST** be rejected.
+
+The complete PDU without radio preamble or synchronization is 88 octets: a
+28-octet base header, the 56-octet descriptor, and a 4-octet frame CRC.
+Descriptor Version 1 remains fixed at 56 octets.  Future mandatory features
+require a new descriptor version, a critical header TLV or flag, or another
+descriptor frame type; unknown non-critical TLVs remain ignorable.
+
+When both OBJECT_DESCRIPTOR and MANIFEST are received, their dimensions,
+encoding, pixel format, encoded size, CRC-32, SHA-256, chunk size, and chunk
+count **MUST** match.  A receiver **MUST** reject the session on conflict.
+
+### Encoding ID Registry
+
+`auto` is sender-side selection behavior and **MUST NOT** appear on the wire.
+
+| ID | Encoding | Media Type |
+|----|----------|------------|
+| 0x01 | CCITT Group 3 TIFF | `image/tiff` |
+| 0x02 | CCITT Group 4 TIFF | `image/tiff` |
+| 0x03 | PNG | `image/png` |
+| 0x04 | JPEG | `image/jpeg` |
+| 0x05 | Packed raw raster | `image/rifp-raster` |
+| 0x06 | RLE raster | `image/rifp-raster` |
+| 0x07 | ZLIB raster | `image/rifp-raster` |
+| 0x80--0xFF | Private use | Profile-specific |
+
+### Pixel Format Registry
+
+| ID | Pixel Format |
+|----|--------------|
+| 0x01 | 1-bit grayscale |
+| 0x02 | 2-bit grayscale |
+| 0x03 | 4-bit grayscale |
+| 0x04 | 8-bit grayscale |
+| 0x05 | RGB888 |
+| 0x06 | RGBA8888 |
+| 0x80--0xFF | Private use |
+
+For TIFF, PNG, and JPEG, receivers **MUST** verify that decoded dimensions and
+pixel representation agree with the descriptor.
+
 ## Unknown Frame Types
 
 A receiver **MUST** validate the complete header and CRC before deciding that a
 Frame Type is unknown.  It **MUST** then ignore the frame.  Unknown frame types
 do not invalidate other frames in the same session.
 
-# Manifest Format
+# Optional Extended Manifest Format
 
 The manifest is a JSON object encoded as UTF-8 without a byte-order mark.
 Field names and string values are case sensitive.  For interoperable JSON
@@ -428,13 +512,13 @@ reduce the cost of losing one frame but increase header overhead.  The initial
 CPFSK profile recommends 192 payload octets per DATA frame.
 
 A receiver maintains reassembly state keyed by Session ID.  It **MUST** accept
-valid DATA chunks before the MANIFEST arrives, subject to local resource
+valid DATA chunks before the OBJECT_DESCRIPTOR arrives, subject to local resource
 limits.  It **MUST** de-duplicate frames by at least Session ID, Frame Type,
 Sequence Number, and content.
 
 A receiver completes a session only when:
 
-* a valid MANIFEST is available;
+* a valid OBJECT_DESCRIPTOR is available;
 * every DATA Sequence Number from zero through `chunk_count - 1` is present;
 * concatenation yields exactly `encoded_size` octets;
 * CRC-32 matches `payload_crc32`; and
@@ -566,8 +650,8 @@ The registry contains 8-bit values.  Values 0x00 and 0xFF are Reserved.
 Values 0x01 through 0x3F require Specification Required.  Values 0x40 through
 0x7F are for Experimental Use.  Values 0x80 through 0xFE are for Private Use.
 
-Initial registrations are MANIFEST (0x01), DATA (0x02), END (0x03), and CANCEL
-(0x04), all referencing this document.
+Initial registrations are MANIFEST (0x01), DATA (0x02), END (0x03), CANCEL
+(0x04), and OBJECT_DESCRIPTOR (0x05), all referencing this document.
 
 ## RIFP Header TLV Base Types
 
@@ -594,6 +678,18 @@ a reference.
 
 Initial registrations are `identity`, `ccitt-group3`, `ccitt-group4`, `raw`,
 `rle8`, and `zlib`.
+
+## RIFP Object Encoding IDs
+
+The registry contains 8-bit values.  Values 0x01 through 0x07 are assigned as
+specified in the Encoding ID Registry above, values 0x08 through 0x7F require
+Specification Required, and values 0x80 through 0xFF are for Private Use.
+
+## RIFP Pixel Format IDs
+
+The registry contains 8-bit values.  Values 0x01 through 0x06 are assigned as
+specified in the Pixel Format Registry above, values 0x07 through 0x7F require
+Specification Required, and values 0x80 through 0xFF are for Private Use.
 
 ## image/rifp-raster Media Type
 
@@ -665,7 +761,7 @@ removed before publication.
 
 A Python reference implementation supports:
 
-* MANIFEST, DATA, END, and CANCEL parsing;
+* OBJECT_DESCRIPTOR, optional MANIFEST, DATA, END, and CANCEL parsing;
 * extensible headers and unknown-critical-extension rejection;
 * CCITT Group 3 and Group 4 TIFF, PNG, JPEG, raw, RLE, and ZLIB payloads;
 * CPFSK generation and reception through SoapySDR;

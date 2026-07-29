@@ -32,12 +32,25 @@ import numpy as np
 from PIL import Image, ImageOps
 
 from rifp_protocol import (
+    ENCODING_CCITT_GROUP3,
+    ENCODING_CCITT_GROUP4,
+    ENCODING_JPEG,
+    ENCODING_PNG,
+    ENCODING_RAW,
+    ENCODING_RLE,
+    ENCODING_ZLIB,
     END_PAYLOAD,
     FLAG_RETRANSMISSION,
     FRAME_DATA,
     FRAME_END,
     FRAME_MANIFEST,
+    FRAME_OBJECT_DESCRIPTOR,
     HeaderExtension,
+    ObjectDescriptor,
+    PIXEL_GRAY1,
+    PIXEL_GRAY2,
+    PIXEL_GRAY4,
+    PIXEL_GRAY8,
     RADIO_PROFILE_CPFSK_4800,
     TLV_CONTENT_HINT,
     TLV_RADIO_PROFILE,
@@ -311,6 +324,7 @@ def make_transmission_frames(
     packet_repeats: int,
     profile: str,
     manifest_extensions: dict[str, object],
+    extended_manifest: bool = False,
 ) -> tuple[list[TransmissionFrame], dict[str, object]]:
     chunks = [encoded.payload[i : i + chunk_size] for i in range(0, len(encoded.payload), chunk_size)]
     if len(chunks) > 0xFFFFFFFF:
@@ -354,22 +368,53 @@ def make_transmission_frames(
         sort_keys=True,
         ensure_ascii=True,
     ).encode("utf-8")
+    encoding_id = {
+        "group3": ENCODING_CCITT_GROUP3,
+        "group4": ENCODING_CCITT_GROUP4,
+        "png": ENCODING_PNG,
+        "jpeg": ENCODING_JPEG,
+        "raw": ENCODING_RAW,
+        "rle": ENCODING_RLE,
+        "zlib": ENCODING_ZLIB,
+    }[encoded.codec]
+    pixel_format = {
+        1: PIXEL_GRAY1,
+        2: PIXEL_GRAY2,
+        4: PIXEL_GRAY4,
+        8: PIXEL_GRAY8,
+    }[encoded.bits_per_pixel]
+    descriptor_payload = ObjectDescriptor(
+        encoding_id=encoding_id,
+        pixel_format=pixel_format,
+        width=encoded.width,
+        height=encoded.height,
+        chunk_size=chunk_size,
+        encoded_size=len(encoded.payload),
+        payload_crc32=payload_crc32,
+        payload_sha256=bytes.fromhex(payload_sha256),
+    ).encode()
     frames: list[TransmissionFrame] = []
     for repeat in range(max(1, manifest_repeats)):
         flags = FLAG_RETRANSMISSION if repeat else 0
-        frames.append(TransmissionFrame(FRAME_MANIFEST, 0, len(chunks), manifest_payload, flags))
+        frames.append(TransmissionFrame(FRAME_OBJECT_DESCRIPTOR, 0, len(chunks), descriptor_payload, flags))
+        if extended_manifest:
+            frames.append(TransmissionFrame(FRAME_MANIFEST, 0, len(chunks), manifest_payload, flags))
 
     for sequence, chunk in enumerate(chunks):
         if manifest_every > 0 and sequence > 0 and sequence % manifest_every == 0:
             frames.append(
                 TransmissionFrame(
-                    FRAME_MANIFEST,
+                    FRAME_OBJECT_DESCRIPTOR,
                     0,
                     len(chunks),
-                    manifest_payload,
+                    descriptor_payload,
                     FLAG_RETRANSMISSION,
                 )
             )
+            if extended_manifest:
+                frames.append(
+                    TransmissionFrame(FRAME_MANIFEST, 0, len(chunks), manifest_payload, FLAG_RETRANSMISSION)
+                )
         for repeat in range(max(1, packet_repeats)):
             flags = FLAG_RETRANSMISSION if repeat else 0
             frames.append(TransmissionFrame(FRAME_DATA, sequence, len(chunks), chunk, flags))
@@ -517,6 +562,7 @@ def transmit_image(
         packet_repeats=args.packet_repeats,
         profile=args.profile,
         manifest_extensions=args.manifest_extensions_parsed,
+        extended_manifest=args.extended_manifest or bool(args.manifest_extensions_parsed),
     )
 
     samples_per_symbol = int(round(args.sample_rate / args.symbol_rate))
@@ -621,6 +667,11 @@ def build_parser() -> argparse.ArgumentParser:
     protocol.add_argument("--packet-repeats", type=int, default=2, help="repeat every data frame")
     protocol.add_argument("--manifest-repeats", type=int, default=3)
     protocol.add_argument("--manifest-every", type=int, default=8, help="resend manifest every N data chunks; 0 disables")
+    protocol.add_argument(
+        "--extended-manifest",
+        action="store_true",
+        help="also transmit the optional extended JSON manifest",
+    )
 
     radio = parser.add_argument_group("radio")
     radio.add_argument("--frequency", type=parse_number, default=433.92e6)

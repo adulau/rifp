@@ -4,12 +4,17 @@
 from __future__ import annotations
 
 import unittest
+import hashlib
 import zlib
 
 from rifp_protocol import (
     CRC32,
     DEFAULT_PREAMBLE,
     FRAME_DATA,
+    ENCODING_ZLIB,
+    OBJECT_DESCRIPTOR,
+    ObjectDescriptor,
+    PIXEL_GRAY1,
     HeaderExtension,
     ProtocolError,
     SYNC_WORD,
@@ -24,6 +29,28 @@ from rifp_protocol import (
 
 
 class RIFPProtocolTests(unittest.TestCase):
+    def test_object_descriptor_round_trip_and_fixed_size(self) -> None:
+        digest = hashlib.sha256(b"image").digest()
+        descriptor = ObjectDescriptor(
+            ENCODING_ZLIB, PIXEL_GRAY1, 160, 96, 192, 5, 0x12345678, digest
+        )
+        payload = descriptor.encode()
+        self.assertEqual(len(payload), 56)
+        self.assertEqual(OBJECT_DESCRIPTOR.size, 56)
+        self.assertEqual(ObjectDescriptor.decode(payload), descriptor)
+
+    def test_object_descriptor_rejects_reserved_fields_and_version(self) -> None:
+        payload = bytearray(
+            ObjectDescriptor(ENCODING_ZLIB, PIXEL_GRAY1, 1, 1, 1, 1, 0, b"x" * 32).encode()
+        )
+        payload[3] = 1
+        with self.assertRaisesRegex(ProtocolError, "reserved"):
+            ObjectDescriptor.decode(bytes(payload))
+        payload[3] = 0
+        payload[0] = 2
+        with self.assertRaisesRegex(ProtocolError, "version"):
+            ObjectDescriptor.decode(bytes(payload))
+
     def test_documented_data_frame_vector(self) -> None:
         header = build_header(
             FRAME_DATA,
