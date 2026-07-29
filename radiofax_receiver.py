@@ -339,6 +339,11 @@ def decode_image_payload(payload: bytes, manifest: dict[str, object], max_pixels
                 image = opened.convert("L")
         if image.width != width or image.height != height:
             raise ValueError("decoded image dimensions do not match manifest")
+        if bits_per_pixel < 8:
+            levels = (1 << bits_per_pixel) - 1
+            allowed = np.rint(np.arange(levels + 1) * 255.0 / levels).astype(np.uint8)
+            if not np.all(np.isin(np.asarray(image, dtype=np.uint8), allowed)):
+                raise ValueError("decoded pixels do not match the declared pixel format")
         return image
 
     bytes_per_image = math.ceil(width * height * bits_per_pixel / 8)
@@ -385,14 +390,14 @@ class SessionManager:
             del self.sessions[oldest_id]
         session = self.sessions.setdefault(frame.session_id, ReceiveSession(frame.session_id))
         session.last_seen = time.monotonic()
-        if frame.total > 0:
+        if frame.frame_type in (FRAME_OBJECT_DESCRIPTOR, FRAME_MANIFEST, FRAME_DATA) and frame.total > 0:
             if session.total_chunks is not None and session.total_chunks != frame.total:
                 print(
-                    f"session {frame.session_id:016x}: conflicting chunk total; resetting",
+                    f"session {frame.session_id:016x}: conflicting chunk total; abandoning session",
                     file=sys.stderr,
                 )
-                session.chunks.clear()
-                session.received_bytes = 0
+                del self.sessions[frame.session_id]
+                return
             session.total_chunks = frame.total
 
         if frame.frame_type == FRAME_OBJECT_DESCRIPTOR:
@@ -425,6 +430,8 @@ class SessionManager:
             if len(frame.payload) > MAX_MANIFEST_BYTES:
                 return
             try:
+                if frame.sequence != 0 or frame.total < 1:
+                    raise ValueError("manifest header sequence/total is invalid")
                 manifest = json.loads(frame.payload.decode("utf-8"))
                 if not isinstance(manifest, dict):
                     raise ValueError("manifest is not an object")
@@ -482,6 +489,8 @@ class SessionManager:
                 del self.sessions[frame.session_id]
                 return
         elif frame.frame_type == FRAME_DATA:
+            if frame.total < 1:
+                return
             if session.total_chunks is not None and frame.sequence >= session.total_chunks:
                 return
             existing = session.chunks.get(frame.sequence)
@@ -503,15 +512,43 @@ class SessionManager:
                 session.received_bytes += len(frame.payload)
                 print(f"session {frame.session_id:016x}: received chunk {frame.sequence + 1}, progress {session.progress()}")
         elif frame.frame_type == FRAME_END:
-            if len(frame.payload) == END_PAYLOAD.size:
-                encoded_size, payload_crc32, payload_sha256 = END_PAYLOAD.unpack(frame.payload)
-                if session.manifest is not None:
-                    if encoded_size != int(session.manifest.get("encoded_size", -1)):
-                        print(f"session {frame.session_id:016x}: END size differs from manifest", file=sys.stderr)
-                    if payload_crc32 != int(session.manifest.get("payload_crc32", -1)):
-                        print(f"session {frame.session_id:016x}: END CRC differs from manifest", file=sys.stderr)
-                    if payload_sha256.hex() != str(session.manifest.get("payload_sha256", "")).lower():
-                        print(f"session {frame.session_id:016x}: END SHA-256 differs from manifest", file=sys.stderr)
+            if (
+                frame.sequence != frame.total
+                or frame.total < 1
+                or (session.total_chunks is not None and frame.total != session.total_chunks)
+            ):
+                print(
+                    f"session {frame.session_id:016x}: invalid END header; abandoning session",
+                    file=sys.stderr,
+                )
+                del self.sessions[frame.session_id]
+                return
+            if len(frame.payload) != END_PAYLOAD.size:
+                print(
+                    f"session {frame.session_id:016x}: invalid END payload; abandoning session",
+                    file=sys.stderr,
+                )
+                del self.sessions[frame.session_id]
+                return
+            encoded_size, payload_crc32, payload_sha256 = END_PAYLOAD.unpack(frame.payload)
+            if session.descriptor is not None and (
+                encoded_size != session.descriptor.encoded_size
+                or payload_crc32 != session.descriptor.payload_crc32
+                or payload_sha256 != session.descriptor.payload_sha256
+            ):
+                print(
+                    f"session {frame.session_id:016x}: END conflicts with descriptor; abandoning session",
+                    file=sys.stderr,
+                )
+                del self.sessions[frame.session_id]
+                return
+            if session.manifest is not None:
+                if encoded_size != int(session.manifest.get("encoded_size", -1)):
+                    print(f"session {frame.session_id:016x}: END size differs from manifest", file=sys.stderr)
+                if payload_crc32 != int(session.manifest.get("payload_crc32", -1)):
+                    print(f"session {frame.session_id:016x}: END CRC differs from manifest", file=sys.stderr)
+                if payload_sha256.hex() != str(session.manifest.get("payload_sha256", "")).lower():
+                    print(f"session {frame.session_id:016x}: END SHA-256 differs from manifest", file=sys.stderr)
             print(f"session {frame.session_id:016x}: end marker, progress {session.progress()}")
         elif frame.frame_type == FRAME_CANCEL:
             print(f"session {frame.session_id:016x}: cancelled by sender")
@@ -521,7 +558,12 @@ class SessionManager:
         self._try_complete(session)
 
     def _try_complete(self, session: ReceiveSession) -> None:
-        if session.completed or session.manifest is None or session.total_chunks is None:
+        if (
+            session.completed
+            or session.descriptor is None
+            or session.manifest is None
+            or session.total_chunks is None
+        ):
             return
         if len(session.chunks) < session.total_chunks:
             return
