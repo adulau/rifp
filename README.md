@@ -22,8 +22,8 @@ RIFP 1.0 provides:
 - 32-bit sequence and chunk-count fields;
 - advisory and critical flags;
 - extensible 16-bit type/length/value header fields;
-- MANIFEST, DATA, END and CANCEL frame types;
-- JSON manifests with namespaced extension data;
+- mandatory fixed 56-byte OBJECT_DESCRIPTOR plus DATA, END and CANCEL frames;
+- optional extended JSON MANIFEST frames with namespaced extension data;
 - CRC-32 on every frame;
 - CRC-32 and SHA-256 verification of the complete encoded image;
 - out-of-order delivery, repetition and duplicate detection;
@@ -53,6 +53,7 @@ Run the commands from the directory containing all three Python files:
 python3 radiofax_sender.py example.png \
   --preset small --codec group4 --bits 1 \
   --packet-repeats 1 --manifest-repeats 1 \
+  --extended-manifest \
   --sender-id CIRCL \
   --content-hint "scheduled weather image" \
   --manifest-extension 'org.example.source={"camera":"north"}' \
@@ -155,7 +156,9 @@ noise and a +2.5 kHz carrier offset.
 ## Internet-Draft
 
 The [Radio Image Framing Protocol (RIFP) draft-dulaunoy-rifp-00](https://datatracker.ietf.org/doc/draft-dulaunoy-rifp/) defines the base header, 
-TLV extension model, manifest schema, fragmentation rules, CRC algorithm, CPFSK profile, security considerations, test vector and proposed IANA registries.
+TLV extension model, compact descriptor and optional manifest schemas,
+fragmentation rules, CRC algorithm, CPFSK profile, security considerations,
+test vector and proposed IANA registries.
 
 ## Radio and regulatory notes
 
