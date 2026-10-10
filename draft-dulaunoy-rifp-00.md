@@ -589,6 +589,15 @@ can safely ignore it.  Features affecting decryption, decompression,
 authentication, chunk interpretation, or object integrity normally require a
 critical flag or TLV.
 
+The optional pre-shared-key object authentication extension is specified in
+[@?RIFP-AUTH]. It uses a critical header TLV on OBJECT_DESCRIPTOR frames to
+authenticate the descriptor and its encoded-image digest with HMAC-SHA-256.
+The extension is OPTIONAL to implement and use; it does not change the base
+frame format or require authentication for ordinary RIFP transfers. A receiver
+requiring authenticated images must enforce that policy locally to prevent
+authentication stripping. Its experimental private-use TLV is defined by the
+extension document, not allocated by this core specification.
+
 Potential future extensions include:
 
 * forward-error-correction blocks;
@@ -608,9 +617,13 @@ an attacker capable of replacing all frames and integrity values.
 
 Unlicensed and shared radio channels are susceptible to eavesdropping,
 spoofing, replay, traffic analysis, interference, and intentional jamming.
-Applications requiring confidentiality or source authentication **MUST** use a
-future authenticated-encryption or signature extension, or provide equivalent
+Applications requiring confidentiality or source authentication **MUST** use
+an authenticated-encryption or authentication extension, or provide equivalent
 protection outside RIFP.
+
+[@?RIFP-AUTH] defines optional image authentication using a pre-shared key.
+It authenticates image contents and compact decoding parameters, but does not
+encrypt images, authenticate optional JSON metadata, or prevent replay.
 
 Session IDs are not secrets.  Random generation reduces accidental collision
 and makes casual injection into an active session less convenient, but it is
@@ -791,6 +804,17 @@ Complete frame after sync word:
 0100021c000000000123456789abcdef000000010000000200030000
 616263ed2bb111
 ~~~
+
+# References
+
+<reference anchor='RIFP-AUTH' target='https://datatracker.ietf.org/doc/draft-dulaunoy-rifp-auth/'>
+  <front>
+    <title>Pre-Shared-Key Object Authentication for RIFP</title>
+    <author initials='A.' surname='Dulaunoy' fullname='Alexandre Dulaunoy'/>
+    <date year='2026' month='October'/>
+  </front>
+  <seriesInfo name='Internet-Draft' value='draft-dulaunoy-rifp-auth-00'/>
+</reference>
 
 {backmatter}
 

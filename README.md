@@ -111,6 +111,49 @@ long silence representing regulatory duty-cycle pacing.
 Manifest extensions use `NAMESPACE=JSON`. The namespace must contain a dot or
 colon, for example `org.example.feature={"enabled":true}`.
 
+## Optional image authentication
+
+The [RIFP object authentication extension](standard/draft-dulaunoy-rifp-auth-00.md)
+uses HMAC-SHA-256 with a pre-shared key to detect deliberate image tampering.
+It authenticates the encoded image and compact decoding parameters. It is
+optional in the protocol and tools; existing unsigned transfers still work.
+
+Provision the same **32 random raw bytes** securely on both sides. For local
+testing, create a key outside the checkout (the file is binary, not hex or a
+password):
+
+```bash
+python3 -c 'import os, secrets; fd = os.open("/tmp/rifp.psk", os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600); os.write(fd, secrets.token_bytes(32)); os.close(fd)'
+```
+
+Send and verify through the existing offline IQ workflow:
+
+```bash
+python3 radiofax_sender.py example/input-formats/telefunken-rifp.png \
+  --preset small --codec group4 --bits 1 \
+  --packet-repeats 1 --manifest-repeats 1 --duty-cycle 1 \
+  --auth-key-file /tmp/rifp.psk --auth-key-id station-1 \
+  --iq-output /tmp/authenticated.cf32
+
+python3 radiofax_receiver.py --iq-input /tmp/authenticated.cf32 \
+  --auth-key-file /tmp/rifp.psk --auth-key-id station-1 \
+  --require-auth --output-dir /tmp/authenticated-images
+```
+
+Use `--require-auth` when authenticity is required: otherwise unsigned images
+remain permitted and an attacker can strip the authentication TLV. A signed
+image with a bad tag, missing key or unknown key ID is rejected. The receiver
+prints `image authentication verified` only after checking the MAC and the
+complete image integrity, before reporting the saved file. Authentication
+uses a critical descriptor TLV; older receivers reject that descriptor.
+In IQ-file mode, `--require-auth` exits with status 1 if no authenticated image
+completes; an unsigned or rejected transfer does not count as success.
+
+This PSK scheme does not encrypt images or prevent replay. Anyone holding the
+key can create authenticated images. Filenames, Sender ID, Content Hint and
+optional JSON metadata are outside its authentication scope. The experimental
+TLV uses private-use base type `0x4001`, not an IANA-assigned value.
+
 ## Live recurring transmission
 
 ```bash
@@ -186,6 +229,14 @@ Grayscale diagrams, lossless:
 
 ```bash
 python3 -m unittest -v test_rifp_protocol.py
+```
+
+Run the full implementation suite, including authentication attacks and signed
+and unsigned IQ loopbacks, then the existing codec/preset fixtures:
+
+```bash
+python3 -m unittest -v
+(cd example && python3 -m unittest -v test_telefunken_fixtures.py)
 ```
 
 The implementation has also been exercised with offline IQ loopbacks for

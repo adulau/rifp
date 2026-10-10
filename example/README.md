@@ -1,5 +1,12 @@
 # RIFP Telefunken FuBK test fixtures
 
+The standalone sender and receiver copies here also support the optional
+[object authentication extension](../standard/draft-dulaunoy-rifp-auth-00.md).
+Use the same `--auth-key-file` and `--auth-key-id` on both tools and
+`--require-auth` on the receiver when unsigned transfers must be rejected.
+Keep `rifp_auth.py` alongside the other Python implementation files. See the
+[main README](../README.md#optional-image-authentication) for an IQ loopback.
+
 This directory contains an annotated Telefunken FuBK-style test grid for the
 Radio Image Framing Protocol (RIFP) 1.0 implementation.
 

@@ -31,6 +31,8 @@ from typing import Sequence
 import numpy as np
 from PIL import Image, ImageOps
 
+from rifp_auth import authenticate_descriptor, read_key_file, validate_key_id
+
 from rifp_protocol import (
     ENCODING_CCITT_GROUP3,
     ENCODING_CCITT_GROUP4,
@@ -94,6 +96,7 @@ class TransmissionFrame:
     total: int
     payload: bytes
     flags: int = 0
+    extensions: tuple[HeaderExtension, ...] = ()
 
 
 def parse_number(value: str) -> float:
@@ -325,6 +328,8 @@ def make_transmission_frames(
     profile: str,
     manifest_extensions: dict[str, object],
     extended_manifest: bool = False,
+    auth_key: bytes | None = None,
+    auth_key_id: str = "default",
 ) -> tuple[list[TransmissionFrame], dict[str, object]]:
     chunks = [encoded.payload[i : i + chunk_size] for i in range(0, len(encoded.payload), chunk_size)]
     if len(chunks) > 0xFFFFFFFF:
@@ -425,6 +430,13 @@ def make_transmission_frames(
         bytes.fromhex(payload_sha256),
     )
     frames.append(TransmissionFrame(FRAME_END, len(chunks), len(chunks), end_payload))
+    if auth_key is not None:
+        auth = authenticate_descriptor(auth_key, auth_key_id, session_id, len(chunks), descriptor_payload)
+        frames = [
+            TransmissionFrame(frame.frame_type, frame.sequence, frame.total, frame.payload,
+                              frame.flags, (auth,) if frame.frame_type == FRAME_OBJECT_DESCRIPTOR else ())
+            for frame in frames
+        ]
     return frames, manifest
 
 def cpfsk_modulate(
@@ -563,6 +575,8 @@ def transmit_image(
         profile=args.profile,
         manifest_extensions=args.manifest_extensions_parsed,
         extended_manifest=args.extended_manifest or bool(args.manifest_extensions_parsed),
+        auth_key=args.auth_key,
+        auth_key_id=args.auth_key_id,
     )
 
     samples_per_symbol = int(round(args.sample_rate / args.symbol_rate))
@@ -585,7 +599,7 @@ def transmit_image(
             frame.total,
             frame.payload,
             flags=frame.flags,
-            extensions=extensions,
+            extensions=tuple(extensions) + frame.extensions,
         )
         air_frames.append(air)
         sample_count = len(air) * 8 * samples_per_symbol + 2 * lead_samples
@@ -653,6 +667,8 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     protocol = parser.add_argument_group("protocol")
+    protocol.add_argument("--auth-key-file", type=Path, help="optional 32-byte raw PSK file for HMAC-SHA-256")
+    protocol.add_argument("--auth-key-id", default="default", help="public authentication key identifier")
     protocol.add_argument("--profile", default=RADIO_PROFILE_CPFSK_4800, help="RIFP radio-profile identifier")
     protocol.add_argument("--sender-id", help="optional UTF-8 sender identifier carried as a header TLV")
     protocol.add_argument("--content-hint", help="optional short UTF-8 description carried as a header TLV")
@@ -702,6 +718,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def validate_args(args: argparse.Namespace) -> None:
+    validate_key_id(args.auth_key_id)
     if args.cycles < 0:
         raise ValueError("--cycles must be 0 or greater")
     if args.image_repeats < 1 or args.packet_repeats < 1 or args.manifest_repeats < 1:
@@ -732,6 +749,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parser.parse_args(argv)
     try:
         validate_args(args)
+        args.auth_key = read_key_file(args.auth_key_file) if args.auth_key_file else None
         args.manifest_extensions_parsed = parse_manifest_extensions(args.manifest_extension)
         preset_width = PRESET_WIDTHS[args.preset]
         max_width = args.max_width if args.max_width is not None else preset_width
