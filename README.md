@@ -246,10 +246,12 @@ noise and a +2.5 kHz carrier offset.
 
 ## Internet-Draft
 
-The [Radio Image Framing Protocol (RIFP) draft-dulaunoy-rifp-00](https://datatracker.ietf.org/doc/draft-dulaunoy-rifp/) defines the base header, 
+The [Radio Image Framing Protocol (RIFP) draft-dulaunoy-rifp](https://datatracker.ietf.org/doc/draft-dulaunoy-rifp/) defines the base header, 
 TLV extension model, compact descriptor and optional manifest schemas,
 fragmentation rules, CRC algorithm, CPFSK profile, security considerations,
 test vector and proposed IANA registries.
+
+The [I-D raft-dulaunoy-rifp-auth](https://datatracker.ietf.org/doc/draft-dulaunoy-rifp-auth/) defines an optional object authentication extension for the Radio Image Framing Protocol (RIFP). A critical header TLV authenticates the compact object descriptor using HMAC-SHA-256 and a pre-shared key.
 
 ## Radio and regulatory notes
 
