@@ -26,6 +26,8 @@ from typing import Sequence
 import numpy as np
 from PIL import Image
 
+from rifp_auth import ObjectAuthentication, read_key_file, validate_key, validate_key_id
+
 from rifp_protocol import (
     CRC32,
     ENCODING_CCITT_GROUP3,
@@ -54,6 +56,7 @@ from rifp_protocol import (
     ProtocolError,
     SYNC_WORD,
     TLV_CONTENT_HINT,
+    TLV_OBJECT_AUTH,
     TLV_RADIO_PROFILE,
     TLV_SENDER_ID,
     VERSION_MAJOR,
@@ -88,6 +91,9 @@ class ReceiveSession:
     last_seen: float = field(default_factory=time.monotonic)
     completed: bool = False
     received_bytes: int = 0
+    authentication: ObjectAuthentication | None = None
+    authentication_seen: bool = False
+    authentication_failed: bool = False
 
     def progress(self) -> str:
         total = self.total_chunks or 0
@@ -375,28 +381,50 @@ class SessionManager:
         max_image_bytes: int,
         max_pixels: int,
         max_sessions: int,
+        auth_key: bytes | None = None,
+        auth_key_id: str = "default",
+        require_auth: bool = False,
     ):
+        validate_key_id(auth_key_id)
+        if auth_key is not None:
+            validate_key(auth_key)
+        if require_auth and auth_key is None:
+            raise ValueError("requiring authentication needs an authentication key")
+        self.auth_key = auth_key
+        self.auth_key_id = auth_key_id
+        self.require_auth = require_auth
         self.output_dir = output_dir
         self.save_encoded = save_encoded
         self.max_image_bytes = max_image_bytes
         self.max_pixels = max_pixels
         self.max_sessions = max_sessions
         self.sessions: dict[int, ReceiveSession] = {}
+        # Successful saves are historical outcomes, independent of the bounded
+        # session cache and its eviction/expiry lifecycle.
+        self.authenticated_completions = 0
         output_dir.mkdir(parents=True, exist_ok=True)
 
     def process(self, frame: DecodedFrame) -> None:
+        auth_extensions = [ext for ext in frame.extensions if ext.base_type == TLV_OBJECT_AUTH]
         if frame.session_id not in self.sessions and len(self.sessions) >= self.max_sessions:
             oldest_id = min(self.sessions, key=lambda key: self.sessions[key].last_seen)
             del self.sessions[oldest_id]
         session = self.sessions.setdefault(frame.session_id, ReceiveSession(frame.session_id))
         session.last_seen = time.monotonic()
+        if session.authentication_failed:
+            return
+        session.authentication_seen |= bool(auth_extensions)
+        if auth_extensions and frame.frame_type != FRAME_OBJECT_DESCRIPTOR:
+            print(f"session {frame.session_id:016x}: authentication TLV outside descriptor; abandoning session", file=sys.stderr)
+            self._abandon(session)
+            return
         if frame.frame_type in (FRAME_OBJECT_DESCRIPTOR, FRAME_MANIFEST, FRAME_DATA) and frame.total > 0:
             if session.total_chunks is not None and session.total_chunks != frame.total:
                 print(
                     f"session {frame.session_id:016x}: conflicting chunk total; abandoning session",
                     file=sys.stderr,
                 )
-                del self.sessions[frame.session_id]
+                self._abandon(session)
                 return
             session.total_chunks = frame.total
 
@@ -405,6 +433,19 @@ class SessionManager:
                 if frame.sequence != 0 or frame.total < 1:
                     raise ValueError("descriptor header sequence/total is invalid")
                 descriptor = ObjectDescriptor.decode(frame.payload)
+                if len(auth_extensions) > 1:
+                    raise ValueError("duplicate authentication TLV")
+                authentication = None
+                if auth_extensions:
+                    authentication = ObjectAuthentication.decode(auth_extensions[0])
+                    if self.auth_key is None or authentication.key_id != self.auth_key_id:
+                        raise ValueError("authentication key unavailable or key ID unknown")
+                    if not authentication.verify(self.auth_key, frame.session_id, frame.total, frame.payload):
+                        raise ValueError("object authentication failed")
+                elif self.require_auth or session.authentication is not None:
+                    raise ValueError("object authentication required")
+                if session.authentication is not None and session.authentication != authentication:
+                    raise ValueError("conflicting object authentication")
                 if descriptor.encoded_size > self.max_image_bytes:
                     raise ValueError("encoded image exceeds configured size limit")
                 expected_chunks = math.ceil(descriptor.encoded_size / descriptor.chunk_size)
@@ -416,6 +457,7 @@ class SessionManager:
                 if session.extended_manifest is not None and not manifests_agree(compact, session.extended_manifest, frame.total):
                     raise ValueError("compact descriptor conflicts with JSON manifest")
                 session.descriptor = descriptor
+                session.authentication = authentication
                 session.manifest = {**compact, **({"filename": session.extended_manifest.get("filename", "image")} if session.extended_manifest else {})}
                 print(
                     f"session {frame.session_id:016x}: descriptor "
@@ -424,7 +466,7 @@ class SessionManager:
                 )
             except Exception as exc:
                 print(f"session {frame.session_id:016x}: invalid descriptor: {exc}; abandoning session", file=sys.stderr)
-                del self.sessions[frame.session_id]
+                self._abandon(session)
                 return
         elif frame.frame_type == FRAME_MANIFEST:
             if len(frame.payload) > MAX_MANIFEST_BYTES:
@@ -486,7 +528,7 @@ class SessionManager:
                 )
             except Exception as exc:
                 print(f"session {frame.session_id:016x}: invalid manifest: {exc}; abandoning session", file=sys.stderr)
-                del self.sessions[frame.session_id]
+                self._abandon(session)
                 return
         elif frame.frame_type == FRAME_DATA:
             if frame.total < 1:
@@ -499,7 +541,7 @@ class SessionManager:
                     f"session {frame.session_id:016x}: conflicting payload for chunk {frame.sequence}; abandoning session",
                     file=sys.stderr,
                 )
-                del self.sessions[frame.session_id]
+                self._abandon(session)
                 return
             if existing is None:
                 if session.received_bytes + len(frame.payload) > self.max_image_bytes:
@@ -521,14 +563,14 @@ class SessionManager:
                     f"session {frame.session_id:016x}: invalid END header; abandoning session",
                     file=sys.stderr,
                 )
-                del self.sessions[frame.session_id]
+                self._abandon(session)
                 return
             if len(frame.payload) != END_PAYLOAD.size:
                 print(
                     f"session {frame.session_id:016x}: invalid END payload; abandoning session",
                     file=sys.stderr,
                 )
-                del self.sessions[frame.session_id]
+                self._abandon(session)
                 return
             encoded_size, payload_crc32, payload_sha256 = END_PAYLOAD.unpack(frame.payload)
             if session.descriptor is not None and (
@@ -540,7 +582,7 @@ class SessionManager:
                     f"session {frame.session_id:016x}: END conflicts with descriptor; abandoning session",
                     file=sys.stderr,
                 )
-                del self.sessions[frame.session_id]
+                self._abandon(session)
                 return
             if session.manifest is not None:
                 if encoded_size != int(session.manifest.get("encoded_size", -1)):
@@ -552,20 +594,33 @@ class SessionManager:
             print(f"session {frame.session_id:016x}: end marker, progress {session.progress()}")
         elif frame.frame_type == FRAME_CANCEL:
             print(f"session {frame.session_id:016x}: cancelled by sender")
-            del self.sessions[frame.session_id]
+            self._abandon(session)
             return
 
         self._try_complete(session)
 
+    def _abandon(self, session: ReceiveSession) -> None:
+        if self.require_auth or session.authentication_seen:
+            # Keep a bounded, expiring failure record. Repeated unsigned frames
+            # must not recreate a session after an authentication rejection.
+            session.authentication_failed = True
+            session.chunks.clear()
+            session.received_bytes = 0
+        else:
+            del self.sessions[session.session_id]
+
     def _try_complete(self, session: ReceiveSession) -> None:
         if (
             session.completed
+            or session.authentication_failed
             or session.descriptor is None
             or session.manifest is None
             or session.total_chunks is None
         ):
             return
         if len(session.chunks) < session.total_chunks:
+            return
+        if self.require_auth and session.authentication is None:
             return
         missing = [index for index in range(session.total_chunks) if index not in session.chunks]
         if missing:
@@ -599,6 +654,9 @@ class SessionManager:
                 encoded_output = self.output_dir / f"{timestamp}_{session.session_id:016x}_{stem}.encoded"
                 encoded_output.write_bytes(payload)
             session.completed = True
+            if session.authentication is not None:
+                self.authenticated_completions += 1
+                print(f"session {session.session_id:016x}: image authentication verified (HMAC-SHA-256, key ID {session.authentication.key_id})")
             print(f"session {session.session_id:016x}: saved {output}")
         except Exception as exc:
             print(f"session {session.session_id:016x}: image decode failed: {exc}", file=sys.stderr)
@@ -853,6 +911,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--run-seconds", type=float, default=0.0, help="0 means run until interrupted")
 
     protocol = parser.add_argument_group("protocol/demodulation")
+    protocol.add_argument("--auth-key-file", type=Path, help="32-byte raw PSK file for verifying authenticated images")
+    protocol.add_argument("--auth-key-id", default="default", help="accepted public authentication key identifier")
+    protocol.add_argument("--require-auth", action="store_true", help="reject unsigned images (prevents authentication stripping)")
     protocol.add_argument("--symbol-rate", type=parse_number, default=4800.0)
     protocol.add_argument("--sample-rate", type=parse_number, default=96_000.0)
     protocol.add_argument("--max-payload", type=int, default=32_768)
@@ -883,6 +944,9 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def validate_args(args: argparse.Namespace) -> None:
+    validate_key_id(args.auth_key_id)
+    if args.require_auth and not args.auth_key_file:
+        raise ValueError("--require-auth needs --auth-key-file")
     if args.sample_rate <= 0 or args.symbol_rate <= 0:
         raise ValueError("sample rate and symbol rate must be positive")
     ratio = args.sample_rate / args.symbol_rate
@@ -912,9 +976,15 @@ def main(argv: Sequence[str] | None = None) -> int:
             max_image_bytes=args.max_image_bytes,
             max_pixels=args.max_pixels,
             max_sessions=args.max_sessions,
+            auth_key=read_key_file(args.auth_key_file) if args.auth_key_file else None,
+            auth_key_id=args.auth_key_id,
+            require_auth=args.require_auth,
         )
         if args.iq_input:
             process_iq_file(args, manager)
+            if args.require_auth and manager.authenticated_completions == 0:
+                print("no authenticated image completed", file=sys.stderr)
+                return 1
         else:
             process_live(args, manager)
         return 0

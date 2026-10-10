@@ -2,7 +2,10 @@
 from __future__ import annotations
 
 import hashlib
+import contextlib
+import io
 import json
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -11,6 +14,7 @@ from PIL import Image
 
 import radiofax_receiver as receiver
 import radiofax_sender as sender
+from rifp_protocol import DEFAULT_PREAMBLE, SYNC_WORD, build_air_frame, parse_complete_frame
 
 ROOT = Path(__file__).resolve().parent
 
@@ -32,6 +36,42 @@ class TelefunkenFixtureTests(unittest.TestCase):
         pairs = {(r["preset"], r["requested_codec"]) for r in self.index["records"]}
         expected = {(p, c) for p in sender.PRESET_WIDTHS for c in sender.CODECS}
         self.assertEqual(expected, pairs)
+
+    def test_authenticated_transfer_for_every_codec_and_preset(self) -> None:
+        # This public conformance key is not a deployment credential.
+        key = bytes(range(32))
+        with tempfile.TemporaryDirectory() as directory:
+            for index, manifest in enumerate(self.index['records']):
+                with self.subTest(preset=manifest['preset'], codec=manifest['requested_codec']):
+                    payload = (ROOT / 'codec-fixtures' / manifest['payload_file']).read_bytes()
+                    encoded = sender.EncodedImage(
+                        self.source, manifest['codec'], payload, manifest['width'],
+                        manifest['height'], manifest['bits_per_pixel'], 'fixture.png', len(payload),
+                    )
+                    frames, _ = sender.make_transmission_frames(
+                        encoded, index + 1, 192, 1, 0, 1, 'rifp-cpfsk-4800', {},
+                        auth_key=key, auth_key_id='fixture-key',
+                    )
+                    output = Path(directory) / str(index)
+                    manager = receiver.SessionManager(
+                        output, True, 10_000_000, 10_000_000, 4,
+                        auth_key=key, auth_key_id='fixture-key', require_auth=True,
+                    )
+                    with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+                        for frame in frames:
+                            air = build_air_frame(frame.frame_type, index + 1, frame.sequence,
+                                                  frame.total, frame.payload, extensions=frame.extensions)
+                            parsed = parse_complete_frame(air[len(DEFAULT_PREAMBLE) + len(SYNC_WORD):])
+                            manager.process(receiver.DecodedFrame(
+                                frame.frame_type, index + 1, frame.sequence, frame.total,
+                                parsed.payload, extensions=parsed.header.extensions,
+                            ))
+                    self.assertTrue(manager.sessions[index + 1].completed)
+                    self.assertIsNotNone(manager.sessions[index + 1].authentication)
+                    self.assertEqual(next(output.glob('*.encoded')).read_bytes(), payload)
+                    expected = receiver.decode_image_payload(payload, manifest, max_pixels=10_000_000)
+                    with Image.open(next(output.glob('*.png'))) as received:
+                        np.testing.assert_array_equal(np.asarray(received), np.asarray(expected))
 
     def test_payload_hashes_and_decoding(self) -> None:
         for manifest in self.index["records"]:
