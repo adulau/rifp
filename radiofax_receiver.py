@@ -399,6 +399,9 @@ class SessionManager:
         self.max_pixels = max_pixels
         self.max_sessions = max_sessions
         self.sessions: dict[int, ReceiveSession] = {}
+        # Successful saves are historical outcomes, independent of the bounded
+        # session cache and its eviction/expiry lifecycle.
+        self.authenticated_completions = 0
         output_dir.mkdir(parents=True, exist_ok=True)
 
     def process(self, frame: DecodedFrame) -> None:
@@ -652,6 +655,7 @@ class SessionManager:
                 encoded_output.write_bytes(payload)
             session.completed = True
             if session.authentication is not None:
+                self.authenticated_completions += 1
                 print(f"session {session.session_id:016x}: image authentication verified (HMAC-SHA-256, key ID {session.authentication.key_id})")
             print(f"session {session.session_id:016x}: saved {output}")
         except Exception as exc:
@@ -978,10 +982,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         )
         if args.iq_input:
             process_iq_file(args, manager)
-            if args.require_auth and not any(
-                session.completed and session.authentication is not None
-                for session in manager.sessions.values()
-            ):
+            if args.require_auth and manager.authenticated_completions == 0:
                 print("no authenticated image completed", file=sys.stderr)
                 return 1
         else:

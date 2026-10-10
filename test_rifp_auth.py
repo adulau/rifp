@@ -19,7 +19,7 @@ import numpy as np
 
 import rifp_protocol
 from radiofax_receiver import DecodedFrame, SessionManager
-from radiofax_sender import EncodedImage, make_transmission_frames, quantize_grayscale, resize_grayscale
+from radiofax_sender import EncodedImage, cpfsk_modulate, make_transmission_frames, quantize_grayscale, resize_grayscale
 from rifp_auth import ObjectAuthentication, authenticate_descriptor, read_key_file
 from rifp_protocol import (
     DEFAULT_PREAMBLE, SYNC_WORD, ENCODING_RAW, PIXEL_GRAY8,
@@ -240,6 +240,36 @@ class AuthenticationTests(unittest.TestCase):
                     self.assertEqual(failure.returncode, 1, failure.stdout + failure.stderr)
                     self.assertEqual(list(rejected.iterdir()), [])
                     self.assertNotIn('image authentication verified', failure.stdout)
+
+    def test_cli_authenticated_success_survives_session_eviction(self):
+        temporary = Path(self.temporary.name)
+        key_file = temporary / 'key'
+        key_file.write_bytes(KEY)
+        iq = temporary / 'eviction.cf32'
+        samples = []
+        for session_id, key in ((7, KEY), (8, None)):
+            frames, _ = make_transmission_frames(
+                self.encoded, session_id, 192, 1, 0, 1, 'rifp-cpfsk-4800', {},
+                auth_key=key, auth_key_id='test-key',
+            )
+            for frame in frames:
+                air = build_air_frame(frame.frame_type, session_id, frame.sequence,
+                                      frame.total, frame.payload, extensions=frame.extensions)
+                samples.append(cpfsk_modulate(air, 96_000, 4800, 4000, 0.45, 2, 8))
+                samples.append(np.zeros(4800, dtype=np.complex64))
+        np.concatenate(samples).tofile(iq)
+        for directory in (ROOT, ROOT / 'example'):
+            with self.subTest(directory=directory.name):
+                output = temporary / directory.name
+                receiver = subprocess.run(
+                    [sys.executable, str(directory / 'radiofax_receiver.py'), '--iq-input', str(iq),
+                     '--output-dir', str(output), '--auth-key-file', str(key_file),
+                     '--auth-key-id', 'test-key', '--require-auth', '--max-sessions', '1'],
+                    capture_output=True, text=True, timeout=30)
+                self.assertEqual(len(list(output.glob('*.png'))), 1, receiver.stdout + receiver.stderr)
+                self.assertIn('image authentication verified', receiver.stdout)
+                self.assertIn('object authentication required', receiver.stderr)
+                self.assertEqual(receiver.returncode, 0, receiver.stdout + receiver.stderr)
 
 
 if __name__ == '__main__':
