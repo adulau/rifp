@@ -1,6 +1,6 @@
 # RIFP radio image sender and receiver
 
-The **Radio Image Framing Protocol (RIFP) 1.0** is an experimental, extensible standard 
+The **Radio Image Framing Protocol (RIFP) 1.1** is an experimental, extensible standard
 for sending images over low-rate radio links.
 
 The default `rifp-cpfsk-4800` profile uses binary continuous-phase FSK and can
@@ -15,7 +15,7 @@ compression.
 
 ## Protocol properties
 
-RIFP 1.0 provides:
+RIFP 1.1 provides:
 
 - a 28-byte versioned base header;
 - 64-bit random session identifiers;
@@ -27,8 +27,9 @@ RIFP 1.0 provides:
 - CRC-32 on every frame;
 - CRC-32 and SHA-256 verification of the complete encoded image;
 - out-of-order delivery, repetition and duplicate detection;
-- explicit media types and content-encoding names; and
-- named radio profiles that are independent of the framing protocol.
+- explicit media types and content-encoding names;
+- named radio profiles that are independent of the framing protocol;
+- extension such as image authentication.
 
 Unknown advisory extensions are ignored. Unknown critical extensions cause the
 individual frame to be rejected, allowing future features such as encryption,
